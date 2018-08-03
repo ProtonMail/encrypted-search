@@ -43,7 +43,8 @@ export default ({ keywords = [], keywordsToIds = [], N = 0, idsToKeywords = {} }
         keywordToIds.forEach((id) => {
             const documentKeywords = idsToKeywords[id] || []
 
-            const termFrequencyInDocument = documentKeywords.filter((documentKeyword) => documentKeyword === keyword)
+            const termFrequencyInDocument = documentKeywords
+                .filter((documentKeyword) => documentKeyword === keyword)
                 .length
             const documentTermWeight = wt(termFrequencyInDocument) * inverseTermDocumentFrequency
             const score = documentTermWeight * queryTermWeight

@@ -1,4 +1,4 @@
-import scoring from '../src/helper/scoring'
+import scoring from './scoring'
 
 describe('scoring', () => {
     it('should give score 0 to queries that match nothing', () => {

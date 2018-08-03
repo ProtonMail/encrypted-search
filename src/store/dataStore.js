@@ -8,42 +8,42 @@ export default (store) => {
     /**
      * Insert data.
      * @param {String} id
-     * @param {Any} data
-     * @param {Array} keywords
+     * @param {*} data
+     * @param {Array} keywords Keywords as tokenized in order
+     * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const insert = (id = '', data, keywords = []) => {
-        return store.set(id, { data, keywords })
+    const insert = (id = '', data, keywords = [], tx) => {
+        return store.set(id, { data, keywords }, tx)
     }
 
     /**
      * Get data.
      * @param {String} id
-     * @param {Transaction} [tx]
+     * @param {IDBTransaction} tx
      * @returns {Promise<Any | undefined>}
      */
-    const get = (id, tx = store.transaction('readonly')) => store.get(id, tx)
+    const get = (id, tx) => store.get(id, tx)
 
     /**
      * Get the keywords of a data.
      * @param {String} id
-     * @param {Transaction} [tx]
+     * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const getKeywords = async (id, tx = store.transaction('readonly')) => {
+    const getKeywords = async (id, tx) => {
         const value = await get(id, tx)
         return (value && value.keywords) || []
     }
 
     /**
-     * Update the data.
+     * Update data of an id.
      * @param {String} id
      * @param {Function} cb
+     * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const update = async (id = '', cb) => {
-        const tx = store.transaction('readwrite')
-
+    const update = async (id = '', cb, tx) => {
         const oldValue = await get(id, tx)
         const { keywords = [], data = {} } = oldValue || {}
 
@@ -51,18 +51,18 @@ export default (store) => {
     }
 
     /**
-     * Get multiple datas.
+     * Get multiple.
      * @param {Array} ids
-     * @returns {Promise<(Object)[]>}
+     * @param {IDBTransaction} tx
+     * @returns {Promise}
      */
-    const getDatas = async (ids = []) => {
-        const tx = store.transaction('readonly')
+    const getByIds = async (ids = [], tx) => {
         return Promise.all(ids.map((id) => get(id, tx)))
     }
 
     return {
         insert,
-        getDatas,
+        getByIds,
         getKeywords,
         update,
         remove: store.remove,

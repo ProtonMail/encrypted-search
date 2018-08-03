@@ -13,10 +13,10 @@ module.exports = (config) => {
             }
         },
         files: [
-            'test/**/*.spec.js'
+            'src/**/*.spec.js'
         ],
         preprocessors: {
-            'test/**/*.spec.js': ['rollup']
+            'src/**/*.spec.js': ['rollup']
         },
         rollupPreprocessor: {
             output: {

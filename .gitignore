@@ -8,3 +8,4 @@ node_modules
 npm-debug.log
 dist
 package-lock.json
+src/query/grammar.js

@@ -1,4 +1,4 @@
-import tokenize from '../src/helper/tokenize'
+import tokenize from './tokenize'
 
 describe('tokenizer', () => {
     it('should should convert single-token strings', () => {

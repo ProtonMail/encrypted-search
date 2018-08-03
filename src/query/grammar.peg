@@ -1,0 +1,111 @@
+{
+    function compareNot(c) {
+       return c === '-' || c === '!';
+    }
+
+    function notIdx(o) {
+        if (typeof o !== 'string') {
+            return false;
+        }
+        for (var i = 0; i < o.length; ++i) {
+            if (compareNot(o.charAt(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    function checkNot(o) {
+        if (typeof o !== 'string') {
+            return false;
+        }
+        return compareNot(o.charAt(0));
+    }
+}
+
+start
+    = And
+
+And
+    = nl:NOT a:Order AND nr:NOT b:And {
+        if (nl && nr) {
+            error('Unexpected NOT in AND query');
+        }
+        return ['&', a, b, nl ? true : false, nr ? true : false];
+    }
+    / Order
+
+Order
+    = a:Or ORDER b:Order {
+        return ['<<', a, b];
+    }
+    / Or
+
+Or
+    = a:Atom OR b:Or {
+        return ['|', a, b];
+    }
+    / Atom
+
+Atom
+    = Expression
+    / Phrase
+    / Keyword
+
+Expression
+    = '(' _ expr:start _ ')' { return expr; }
+
+Keyword
+    = _ a:KEYWORD_START_OPERATOR b:[^ \t)(<|&$]+ c:KEYWORD_END_OPERATOR {
+        var value = b.join('');
+        if (notIdx(value) !== -1) {
+            error('Unexpected NOT in WORD');
+        }
+        if (value === '*') {
+            error('Unexpected wildcard, only supported in PHRASE query')
+        }
+        return ['w', value, a ? a : '', c ? c : ''];
+    }
+
+Phrase
+    = '"' x:PHRASE_START_OPERATOR a:[^"$]+ y:PHRASE_END_OPERATOR '"' b:PHRASE_OPERATOR {
+        var value = a.join('');
+        if (notIdx(value) !== -1) {
+            error('Unexpected NOT in PHRASE query');
+        }
+        var extra = b.length ? b[0] : ''
+        var n = b.length ? parseInt(b[1].join(''), 10) : 0
+        return ['"', value, (x ? x : '') + (y ? y : ''), extra, n];
+    }
+
+NOT
+    = [!-]?
+
+OR
+    = _ '|' _
+
+ORDER
+    = _ '<<' _
+
+AND
+    = _ '&' _ / [ \t]+
+
+KEYWORD_START_OPERATOR
+	= '^'? / '*'?
+
+KEYWORD_END_OPERATOR
+	= '$'? / '*'?
+
+PHRASE_OPERATOR
+    = '~' [0-9]+ / '/' [0-9]+ / ''
+
+PHRASE_START_OPERATOR
+    = '^'?
+
+PHRASE_END_OPERATOR
+    = '$'?
+
+_ "whitespace"
+    = [ \t]*
+
+

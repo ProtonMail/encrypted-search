@@ -8,21 +8,36 @@ export default (store) => {
     /**
      * Get a keyword.
      * @param {String} keyword
-     * @param {Transaction} tx
+     * @param {IDBTransaction} tx
      * @returns {Promise<Array>}
      */
-    const getKeyword = async (keyword = '', tx) => {
+    const getKeyword = (keyword = '', tx) => {
         return store.get(keyword, tx)
     }
 
     /**
-     * Get the id mappings from a list of keywords.
+     * Get the union of all id mappings from a list of keywords.
+     * Returns the ids as a flattened unique list of results,
+     * the ids to keywords and keywords to ids
      * @param {Array} keywords
-     * @returns {Promise<Array>}
+     * @param {IDBTransaction} tx
+     * @returns {Promise}
      */
-    const get = (keywords = []) => {
-        const tx = store.transaction('readonly')
-        return Promise.all(keywords.map((keyword) => getKeyword(keyword, tx)))
+    const get = async (keywords = [], tx) => {
+        const keywordsToIds = await Promise.all(keywords.map((keyword) => getKeyword(keyword, tx)))
+        return keywordsToIds.reduce((acc, cur = [], i) => {
+            cur.forEach((id) => {
+                const idx = acc.ids.indexOf(id)
+                const keyword = keywords[i]
+                if (idx === -1) {
+                    acc.ids.push(id)
+                    acc.idsToKeywords.push([keyword])
+                } else {
+                    acc.idsToKeywords[idx].push(keyword)
+                }
+            })
+            return acc
+        }, { ids: [], idsToKeywords: [], keywordsToIds })
     }
 
     /**
@@ -32,7 +47,7 @@ export default (store) => {
      * e.g: 'needle': [1,2,3,4,5]
      * @param {String} keyword
      * @param {String} id
-     * @param {Transaction} tx
+     * @param {IDBTransaction} tx
      * @returns {Promise}
      */
     const insertKeywordLink = async (keyword = '', id = '', tx) => {
@@ -44,18 +59,18 @@ export default (store) => {
             return
         }
 
-        const newValues = [...oldValues, id]
-        return store.set(keyword, newValues, tx)
+        oldValues.push(id)
+        return store.set(keyword, oldValues, tx)
     }
 
     /**
      * Insert a list of keyword-id mapping.
      * @param {Array} keywords
      * @param {String} id
+     * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const insert = (keywords = [], id = '') => {
-        const tx = store.transaction('readwrite')
+    const insert = (keywords = [], id = '', tx) => {
         return Promise.all(keywords.map((keyword) => insertKeywordLink(keyword, id, tx)))
     }
 
@@ -64,33 +79,40 @@ export default (store) => {
      * If it was the only id, remove the keyword completely.
      * @param {String} keyword
      * @param {String} id
-     * @param {Transaction} tx
+     * @param {IDBTransaction} tx
      * @returns {Promise}
      */
     const removeKeywordLink = async (keyword = '', id = '', tx) => {
         const result = await store.get(keyword, tx)
+
         const oldValues = result || []
+        if (oldValues.length === 0) {
+            return true
+        }
         if (oldValues.indexOf(id) === -1) {
-            return
+            return false
         }
 
         const newValues = oldValues.filter((aId) => aId !== id)
 
-        // If it's empty, just remove the keyword.
+        // If it's empty, remove the keyword.
         if (newValues.length === 0) {
-            return store.remove(keyword, tx)
+            store.remove(keyword, tx)
+            return true
         }
-        return store.set(keyword, newValues, tx)
+
+        store.set(keyword, newValues, tx)
+        return false
     }
 
     /**
      * Remove a list of keyword-id mapping
      * @param {Array} keywords
      * @param {String} id
+     * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const remove = (keywords = [], id = '') => {
-        const tx = store.transaction('readwrite')
+    const remove = (keywords = [], id = '', tx) => {
         return Promise.all(keywords.map((keyword) => removeKeywordLink(keyword, id, tx)))
     }
 

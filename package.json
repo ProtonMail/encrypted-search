@@ -1,31 +1,34 @@
 {
     "name": "encrypted-search",
     "version": "1.0.0",
-    "description": "Generates an encrypted search index in the browser",
+    "description": "Encrypted search index for the browser",
     "license": "MIT",
     "author": "Mattias Svanström <mmso@mmso.se>",
-    "main": "src/index.mjs",
+    "main": "src/index.esm.js",
     "scripts": {
-        "lint": "eslint src/*.mjs test/*.js",
-        "test": "npm run lint && npx karma start karma.conf.js"
+        "lint": "eslint src/*.js src/**/*.js",
+        "test": "npm run lint && npx karma start karma.conf.js",
+        "build": "npx pegjs src/query/grammar.peg",
+        "prepublish": "npm run build",
+        "pretest": "npm run build"
     },
     "devDependencies": {
+        "pegjs": "^0.10.0",
         "eslint": "^5.1.0",
         "jasmine": "^3.1.0",
         "jasmine-core": "^3.1.0",
-        "karma": "^2.0.4",
+        "karma": "^3.0.0",
         "karma-chrome-launcher": "^2.2.0",
         "karma-jasmine": "^1.1.2",
         "karma-rollup-preprocessor": "^6.0.0",
         "puppeteer": "^1.6.0",
-        "rollup": "^0.63.2",
+        "rollup": "^0.64.1",
         "rollup-plugin-commonjs": "^9.1.3",
         "rollup-plugin-node-resolve": "^3.3.0",
         "asmcrypto.js": "^2.3.0",
         "tweetnacl": "^1.0.0"
     },
     "dependencies": {
-        "idb": "^2.1.3",
         "latenize": "^0.2.0"
     }
 }
