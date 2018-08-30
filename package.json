@@ -9,11 +9,12 @@
         "lint": "eslint src/*.js src/**/*.js",
         "test": "npm run lint && npx karma start karma.conf.js",
         "build": "npx pegjs src/query/grammar.peg",
-        "prepublish": "npm run build",
-        "pretest": "npm run build"
+        "postinstall": "npm run build"
+    },
+    "dependencies": {
+      "pegjs": "^0.10.0"
     },
     "devDependencies": {
-        "pegjs": "^0.10.0",
         "eslint": "^5.1.0",
         "jasmine": "^3.1.0",
         "jasmine-core": "^3.1.0",
