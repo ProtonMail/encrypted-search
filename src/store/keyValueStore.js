@@ -1,4 +1,5 @@
 import { request } from '../helper/idb'
+import sizeof from '../helper/sizeof'
 
 /**
  * Enhance a key-value store with encryption.
@@ -30,24 +31,6 @@ export const withEncryption = (store = {}, { hash, encrypt, decrypt }) => {
  * @returns {Object}
  */
 export default (tableName = '') => {
-    /**
-     * Get the byte size.
-     * @param {String | Uint8Array} value
-     * @returns {Number}
-     */
-    const getSize = (value) => {
-        if (!value) {
-            return 0
-        }
-        if (value.byteLength) {
-            return value.byteLength
-        }
-        if (value.length) {
-            return value.length
-        }
-        return 0
-    }
-
     return {
         count: (tx) => {
             return request(tx.objectStore(tableName).count())
@@ -62,7 +45,7 @@ export default (tableName = '') => {
                     if (!cursor) {
                         return resolve(size)
                     }
-                    size += getSize(cursor.value) + getSize(cursor.key)
+                    size += sizeof(cursor.value) + sizeof(cursor.key)
                     cursor.continue()
                 }
             })
