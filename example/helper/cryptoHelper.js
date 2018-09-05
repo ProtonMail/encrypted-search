@@ -4,10 +4,10 @@ import { Pbkdf2HmacSha256 } from 'asmCrypto.js'
 import { concatUint8Array } from './arrayHelper'
 
 const ITERATIONS = 10
-const DKLEN = 32
+const DKLEN = 16
 const KEY_LENGTH = 32
 const SALT_LENGTH = 32
-const NONCE_LENGTH = 24
+export const NONCE_LENGTH = 24
 
 // eslint-disable-next-line import/prefer-default-export
 export const getRandomValues = (buf) => {

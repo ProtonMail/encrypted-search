@@ -1,17 +1,20 @@
 import { create as createIndex, tokenize, query, parse } from '../index.esm'
-import createEncryptionHelper from '../../example/helper/encryptionHelper'
+import createEncryptionHelper, { transformer } from '../../example/helper/encryptionHelper'
 
 const indexKey = new Uint8Array(32)
 const indexSalt = new Uint8Array(32)
-const { hash, encrypt, decrypt } = createEncryptionHelper(indexKey, indexSalt)
+
+const encryptionHelper = createEncryptionHelper(indexKey, indexSalt)
+const createTransformer = transformer(encryptionHelper)
 
 describe('query', () => {
-    const getIndex = () => createIndex({ hash, encrypt, decrypt })
+    const getIndex = () => createIndex({ createTransformer })
 
     let index
 
     beforeAll(async () => {
         index = await getIndex()
+
         await index.store('123', tokenize('hello world!'))
         await index.store('124', tokenize('cat aaa bbb ccc mouse ddd dog'))
         await index.store('125', tokenize('cat aaa bbb mouse ccc dog'))

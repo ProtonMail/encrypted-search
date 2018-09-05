@@ -7,14 +7,14 @@ import { READWRITE, transaction } from '../helper/idb'
  * @param {String} name
  * @returns {Object}
  */
-export default (store, getTransaction, name) => {
+export default (store, getTransaction) => {
     /**
      * Get a key from the table.
      * @param {String} key
      * @returns {Promise}
      */
     const get = async (key) => {
-        return store.get(key, await getTransaction([name]))
+        return store.get(key, await getTransaction([store.name]))
     }
 
     /**
@@ -24,7 +24,7 @@ export default (store, getTransaction, name) => {
      * @returns {Promise}
      */
     const set = async (key, value) => {
-        const tx = await getTransaction([name], READWRITE)
+        const tx = await getTransaction([store.name], READWRITE)
         const promise = transaction(tx)
         store.set(key, value, tx)
         return promise
@@ -36,7 +36,7 @@ export default (store, getTransaction, name) => {
      * @returns {Promise}
      */
     const remove = async (key) => {
-        const tx = await getTransaction([name], READWRITE)
+        const tx = await getTransaction([store.name], READWRITE)
         const promise = transaction(tx)
         store.remove(key, tx)
         return promise

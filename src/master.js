@@ -4,7 +4,8 @@ import createDataStore from './store/dataStore'
 import createKeywordsStore from './store/keywordStore'
 import createWildcardStore from './store/wildcardStore'
 import createMetadataStore from './store/metadataStore'
-import createKeyValueStore, { withEncryption } from './store/keyValueStore'
+import createTranslationStore from './store/translationStore'
+import createKeyValueStore, { withTransformers } from './store/keyValueStore'
 
 import { unique } from './helper/array'
 
@@ -12,15 +13,36 @@ const DB_VERSION = 1
 const INTEGRITY_KEY = 'T_E_S_T'
 const INTEGRITY_VALUE = 'TEST'
 
-const upgradeDb = ({ keywords, data, metadata, wildcards }) => (db, oldVersion) => {
+export const TABLES = {
+    KEYWORDS: 1,
+    DATA: 2,
+    WILDCARDS: 3,
+    METADATA: 4,
+    TRANSLATIONS: 5
+}
+
+const upgradeDb = ({ keywords, data, metadata, wildcards, translations }) => (db, oldVersion) => {
     switch (oldVersion) {
         case 0:
             db.createObjectStore(metadata)
             db.createObjectStore(keywords)
             db.createObjectStore(data)
             db.createObjectStore(wildcards)
+            db.createObjectStore(translations)
     }
 }
+
+const assertId = (id) => {
+    const type = typeof id
+    return !(!id || (type !== 'string' && type !== 'number'))
+}
+
+const defaultCreateTransformer = () => ({
+    property: (key) => key,
+    serialize: (key, value) => value,
+    deserialize: (key, value) => value
+})
+
 /**
  * Create the encrypted search index.
  * @param {String} [dbName='index'] - The name of this database.
@@ -28,39 +50,62 @@ const upgradeDb = ({ keywords, data, metadata, wildcards }) => (db, oldVersion) 
  * @param {String} [keywordsName='keywords'] - The name of the keywords object store.
  * @param {String} [wildcardsName='wildcards'] - The name of the wildcards object store.
  * @param {String} [metadataName='metadata'] - The name of the metadata object store.
+ * @param {String} [translationName='translations'] - The name of the translation object store.
  * @param {Number} [closeTimeout=15000] - Timeout before closing the indexedDB connection.
- * @param {Function} hash - Function that transform the key to a hashed value. Must be synchronous for IDB transactions.
- * @param {Function} encrypt - Function that encrypts the value. Must be synchronous for IDB transactions.
- * @param {Function} decrypt - Function that decrypt the value. Must be synchronous for IDB transactions.
+ * @param {Function} createTransformer - Function that returns the property, serialize, and deserialize functions.
  * @returns {Object}
  */
-export default ({ dbName = 'index', dataName = 'data', keywordsName = 'keywords', wildcardsName = 'wildcards', metadataName = 'metadata', closeTimeout = 15000, hash, encrypt, decrypt } = {}) => {
-    if (!hash || !encrypt || !decrypt) {
-        throw new Error('Hash/encrypt/decrypt required')
-    }
-
+export default ({
+    dbName = 'index',
+    dataName = 'data',
+    keywordsName = 'keywords',
+    wildcardsName = 'wildcards',
+    metadataName = 'metadata',
+    translationName = 'translations',
+    closeTimeout = 15000,
+    createTransformer = defaultCreateTransformer
+} = {}) => {
     const open = () => openDb(indexedDB, dbName, DB_VERSION, upgradeDb({
         keywords: keywordsName,
         data: dataName,
         wildcards: wildcardsName,
-        metadata: metadataName
+        metadata: metadataName,
+        translations: translationName
     }))
 
     const { getTransaction, close } = openWithClosure(open, closeTimeout)
 
     const keywordsStore = createKeywordsStore(
-        withEncryption(createKeyValueStore(keywordsName), { hash, encrypt, decrypt })
+        withTransformers(
+            createKeyValueStore(keywordsName),
+            createTransformer(TABLES.KEYWORDS)
+        )
     )
     const wildcardStore = createWildcardStore(
-        withEncryption(createKeyValueStore(wildcardsName), { hash, encrypt, decrypt })
+        withTransformers(
+            createKeyValueStore(wildcardsName),
+            createTransformer(TABLES.WILDCARDS)
+        )
     )
     const dataStore = createDataStore(
-        withEncryption(createKeyValueStore(dataName), { hash, encrypt, decrypt })
+        withTransformers(
+            createKeyValueStore(dataName),
+            createTransformer(TABLES.DATA)
+        )
     )
     const metadataStore = createMetadataStore(
-        withEncryption(createKeyValueStore(metadataName), { hash, encrypt, decrypt }),
-        getTransaction,
-        metadataName
+        withTransformers(
+            createKeyValueStore(metadataName),
+            createTransformer(TABLES.METADATA)
+        ),
+        getTransaction
+    )
+    const translationStore = createTranslationStore(
+        withTransformers(
+            createKeyValueStore(translationName),
+            createTransformer(TABLES.TRANSLATIONS)
+        ),
+        getTransaction
     )
 
     /**
@@ -110,6 +155,8 @@ export default ({ dbName = 'index', dataName = 'data', keywordsName = 'keywords'
 
         cleanStaleData(data, ids, uniqueKeywords)
 
+        const idsTranslated = await translationStore.getTranslatedIds(ids)
+
         const result = data
             .reduce((agg, { data, keywords } = {}, i) => {
                 // Ignore stale data.
@@ -117,7 +164,7 @@ export default ({ dbName = 'index', dataName = 'data', keywordsName = 'keywords'
                     return agg
                 }
 
-                const id = ids[i]
+                const id = idsTranslated[i]
                 const match = idsToKeywords[i]
 
                 agg.push({
@@ -139,26 +186,27 @@ export default ({ dbName = 'index', dataName = 'data', keywordsName = 'keywords'
 
     /**
      * Store keywords and data to index.
-     * @param  {String} id
+     * @param {String|Number} id
      * @param  {Array} keywords
      * @param  {*} [data]
      * @return {Promise}
      */
     const store = async (id, keywords, data) => {
-        if (!id || typeof id !== 'string') {
+        if (!assertId(id)) {
             throw new Error('ID required')
         }
         if (!Array.isArray(keywords)) {
             throw new Error('Keywords need to be an array')
         }
 
+        const translatedId = await translationStore.getOrSetId(id)
         const tx = await getTransaction([dataName, keywordsName, wildcardsName], READWRITE)
         const promise = transaction(tx)
 
         const uniqueKeywords = unique(keywords)
 
-        keywordsStore.insert(uniqueKeywords, id, tx)
-        dataStore.insert(id, data, keywords, tx)
+        keywordsStore.insert(uniqueKeywords, translatedId, tx)
+        dataStore.insert(translatedId, data, keywords, tx)
         wildcardStore.insert(uniqueKeywords, tx)
 
         return promise
@@ -166,19 +214,20 @@ export default ({ dbName = 'index', dataName = 'data', keywordsName = 'keywords'
 
     /**
      * Update the data.
-     * @param  {String} id
+     * @param {String|Number} id
      * @param  {Function} cb
      * @returns {Promise}
      */
     const update = async (id, cb) => {
-        if (!id || typeof id !== 'string') {
+        if (!assertId(id)) {
             throw new Error('ID required')
         }
 
+        const translatedId = await translationStore.getOrSetId(id)
         const tx = await getTransaction([dataName], READWRITE)
         const promise = transaction(tx)
 
-        dataStore.update(id, cb, tx)
+        dataStore.update(translatedId, cb, tx)
 
         return promise
     }
@@ -186,23 +235,24 @@ export default ({ dbName = 'index', dataName = 'data', keywordsName = 'keywords'
     /**
      * Remove a data item. Ensures that all keywords related to the data are deleted too.
      * Returns a promise that resolves to a list of keywords that were fully deleted.
-     * @param {String} id
+     * @param {String|Number} id
      * @returns {Promise}
      */
     const remove = async (id = '') => {
-        if (!id || typeof id !== 'string') {
+        if (!assertId(id)) {
             throw new Error('ID required')
         }
 
+        const translatedId = await translationStore.getOrSetId(id)
         const tx = await getTransaction([dataName, keywordsName, wildcardsName], READWRITE)
         const promise = transaction(tx)
 
-        const keywords = await dataStore.getKeywords(id, tx)
+        const keywords = await dataStore.getKeywords(translatedId, tx)
         const uniqueKeywords = unique(keywords)
-        const removals = await keywordsStore.remove(uniqueKeywords, id, tx)
+        const removals = await keywordsStore.remove(uniqueKeywords, translatedId, tx)
         const removedKeywords = uniqueKeywords.filter((keyword, i) => removals[i])
 
-        dataStore.remove(id, tx)
+        dataStore.remove(translatedId, tx)
         wildcardStore.remove(removedKeywords, tx)
 
         return promise
@@ -223,13 +273,14 @@ export default ({ dbName = 'index', dataName = 'data', keywordsName = 'keywords'
      * @return {Promise}
      */
     const clear = async () => {
-        const tx = await getTransaction([dataName, keywordsName, wildcardsName, metadataName], READWRITE)
+        const tx = await getTransaction([dataName, keywordsName, wildcardsName, metadataName, translationName], READWRITE)
         const promise = transaction(tx)
 
         dataStore.clear(tx)
         keywordsStore.clear(tx)
         wildcardStore.clear(tx)
         metadataStore.clear(tx)
+        translationStore.clear(tx)
 
         return promise
     }

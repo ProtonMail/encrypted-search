@@ -2,25 +2,31 @@ import { request } from '../helper/idb'
 import sizeof from '../helper/sizeof'
 
 /**
- * Enhance a key-value store with encryption.
+ * Enhance a key-value store with transformer functions.
  * @param {key-value store} store
- * @param {Function} hash
- * @param {Function} encrypt
- * @param {Function} decrypt
+ * @param {String} table
+ * @param {Function} property
+ * @param {Function} serialize
+ * @param {Function} deserialize
  * @returns {Object}
  */
-export const withEncryption = (store = {}, { hash, encrypt, decrypt }) => {
+export const withTransformers = (store, { property, serialize, deserialize }) => {
     return {
         ...store,
         set: (key, value, tx) => {
-            return store.set(hash(key), encrypt(key, value), tx)
+            const serializedValue = typeof value === 'undefined' ?
+                undefined : serialize(key, value)
+
+            return store.set(property(key), serializedValue, tx)
         },
         get: async (key, tx) => {
-            const encryptedValue = await store.get(hash(key), tx)
-            return decrypt(key, encryptedValue)
+            const encryptedValue = await store.get(property(key), tx)
+
+            return typeof encryptedValue === 'undefined' ?
+                undefined : deserialize(key, encryptedValue)
         },
         remove: (key, tx) => {
-            return store.remove(hash(key), tx)
+            return store.remove(property(key), tx)
         }
     }
 }
@@ -32,6 +38,7 @@ export const withEncryption = (store = {}, { hash, encrypt, decrypt }) => {
  */
 export default (tableName = '') => {
     return {
+        name: tableName,
         count: (tx) => {
             return request(tx.objectStore(tableName).count())
         },

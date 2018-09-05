@@ -1,3 +1,6 @@
+import { insertIntoGapsArray, removeFromGapsArray } from '../helper/array'
+import { vbDecode, vbEncode } from '../helper/variableByteCodes'
+
 /**
  * Keyword database helper.
  * Handles all logic around storing keywords.
@@ -9,7 +12,7 @@ export default (store) => {
      * Get a keyword.
      * @param {String} keyword
      * @param {IDBTransaction} tx
-     * @returns {Promise<Array>}
+     * @returns {Promise<Uint8Array>}
      */
     const getKeyword = (keyword = '', tx) => {
         return store.get(keyword, tx)
@@ -25,8 +28,11 @@ export default (store) => {
      */
     const get = async (keywords = [], tx) => {
         const keywordsToIds = await Promise.all(keywords.map((keyword) => getKeyword(keyword, tx)))
-        return keywordsToIds.reduce((acc, cur = [], i) => {
-            cur.forEach((id) => {
+        return keywordsToIds.reduce((acc, bytes, i) => {
+            let id = 0
+            const cur = vbDecode(bytes)
+            cur.forEach((gap) => {
+                id += gap
                 const idx = acc.ids.indexOf(id)
                 const keyword = keywords[i]
                 if (idx === -1) {
@@ -46,21 +52,20 @@ export default (store) => {
      * Does it in the same read-write transaction to prevent concurrency issues.
      * e.g: 'needle': [1,2,3,4,5]
      * @param {String} keyword
-     * @param {String} id
+     * @param {Number} id
      * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const insertKeywordLink = async (keyword = '', id = '', tx) => {
+    const insertKeywordLink = async (keyword = '', id, tx) => {
         const result = await getKeyword(keyword, tx)
-        const oldValues = result || []
+        const newValues = insertIntoGapsArray(vbDecode(result), id)
 
-        // Only allow unique links.
-        if (oldValues.indexOf(id) !== -1) {
+        // Only allow unique links
+        if (!newValues) {
             return
         }
 
-        oldValues.push(id)
-        return store.set(keyword, oldValues, tx)
+        return store.set(keyword, vbEncode(newValues), tx)
     }
 
     /**
@@ -78,22 +83,22 @@ export default (store) => {
      * Remove a keyword-id mapping.
      * If it was the only id, remove the keyword completely.
      * @param {String} keyword
-     * @param {String} id
+     * @param {Number} id
      * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const removeKeywordLink = async (keyword = '', id = '', tx) => {
-        const result = await store.get(keyword, tx)
+    const removeKeywordLink = async (keyword = '', id, tx) => {
+        const result = await getKeyword(keyword, tx)
 
-        const oldValues = result || []
+        const oldValues = result ? vbDecode(result) : []
         if (oldValues.length === 0) {
             return true
         }
-        if (oldValues.indexOf(id) === -1) {
+
+        const newValues = removeFromGapsArray(oldValues, id)
+        if (!newValues) {
             return false
         }
-
-        const newValues = oldValues.filter((aId) => aId !== id)
 
         // If it's empty, remove the keyword.
         if (newValues.length === 0) {
@@ -101,18 +106,18 @@ export default (store) => {
             return true
         }
 
-        store.set(keyword, newValues, tx)
+        store.set(keyword, vbEncode(newValues), tx)
         return false
     }
 
     /**
      * Remove a list of keyword-id mapping
      * @param {Array} keywords
-     * @param {String} id
+     * @param {Number} id
      * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const remove = (keywords = [], id = '', tx) => {
+    const remove = (keywords = [], id, tx) => {
         return Promise.all(keywords.map((keyword) => removeKeywordLink(keyword, id, tx)))
     }
 

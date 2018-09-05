@@ -175,3 +175,82 @@ export const quorom = (a = [], b = [], n, comparator = defaultComparator) => {
         return counter >= n
     })
 }
+
+/**
+ * Insert an item into a gaps array.
+ * @param {Array} array
+ * @param {Number} id
+ * @returns {Array|undefined} Returns undefined if the item already exists
+ */
+export const insertIntoGapsArray = (array = [], id) => {
+    if (array.length === 0) {
+        return [id]
+    }
+
+    let i = 0
+    let currentValue = 0
+    let prevValue = 0
+    do {
+        currentValue = prevValue + array[i]
+
+        if (currentValue === id) {
+            return
+        }
+
+        if (id < currentValue) {
+            break
+        }
+
+        prevValue = currentValue
+
+        i++
+    } while (i < array.length)
+
+    if (i === 0) {
+        array.unshift(id)
+        array[1] = array[1] - id
+    } else if (i === array.length) {
+        array.push(id - prevValue)
+    } else {
+        array.splice(i, 0, id - prevValue)
+        array[i + 1] = currentValue - id
+    }
+
+    return array
+}
+
+export const removeFromGapsArray = (array = [], id) => {
+    if (array.length === 0) {
+        return []
+    }
+
+    let i = 0
+    let currentValue = 0
+    let prevValue = 0
+    do {
+        currentValue = prevValue + array[i]
+        if (currentValue === id) {
+            break
+        }
+        prevValue = currentValue
+        i++
+    } while (i < array.length)
+
+    if (i === array.length) {
+        return
+    }
+    if (i === array.length - 1) {
+        array.splice(i, 1)
+        return array
+    }
+    if (i === 0) {
+        array.splice(0, 1)
+        array[0] = currentValue + array[0]
+        return array
+    }
+
+    array.splice(i, 1)
+    array[i] = (currentValue + array[i]) - prevValue
+
+    return array
+}

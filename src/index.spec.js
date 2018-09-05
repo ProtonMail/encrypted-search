@@ -1,6 +1,8 @@
 import { open, transaction, request } from './helper/idb'
 import { create as createIndex, tokenize, parse, query } from './index.esm'
-import createEncryptionHelper from '../example/helper/encryptionHelper'
+import createEncryptionHelper, { transformer } from '../example/helper/encryptionHelper'
+import { vbDecode } from './helper/variableByteCodes'
+import { TABLES } from './master'
 
 const MOCK = {
     ID: '123',
@@ -16,39 +18,69 @@ const TABLE_NAMES = {
     data: 'data',
     metadata: 'metadata',
     keywords: 'keywords',
-    wildcards: 'wildcards'
+    wildcards: 'wildcards',
+    translations: 'translations',
 }
 
 const indexKey = new Uint8Array(32)
 const indexSalt = new Uint8Array(32)
-const { hash, encrypt, decrypt } = createEncryptionHelper(indexKey, indexSalt)
+const encryptionHelper = createEncryptionHelper(indexKey, indexSalt)
+const createTransformer = transformer(encryptionHelper)
+const keywordsTransformer = createTransformer(TABLES.KEYWORDS)
+const restTransformer = createTransformer(TABLES.DATA)
 
 describe('index', () => {
-    const getIndex = () => createIndex({ hash, encrypt, decrypt })
+    const getIndex = () => createIndex({ createTransformer })
 
     const removeValue = async (tableName, key) => {
         const db = await open(indexedDB, DB_NAME, DB_VERSION)
         const tx = db.transaction(tableName, 'readwrite')
         const promise = transaction(tx)
-        tx.objectStore(tableName).delete(hash(key))
+        const transformer = tableName === TABLE_NAMES.keywords ? keywordsTransformer : restTransformer
+        const { property } = transformer
+        tx.objectStore(tableName).delete(property(key))
         await promise
         db.close()
+    }
+
+    const getGaps = (array) => {
+        let currentValue = 0
+        return array.map((v) => {
+            currentValue += v
+            return currentValue
+        })
     }
 
     const getValue = async (tableName, key) => {
         const db = await open(indexedDB, DB_NAME, DB_VERSION)
         const tx = db.transaction(tableName, 'readwrite')
-        const data = await request(tx.objectStore(tableName).get(hash(key)))
-        const value = decrypt(key, data)
+
+        const transformer = tableName === TABLE_NAMES.keywords ? keywordsTransformer : restTransformer
+
+        const { property, deserialize } = transformer
+
+        const data = await request(tx.objectStore(tableName).get(property(key)))
         db.close()
-        return value
+
+        const value = data && deserialize(key, data)
+
+        if (tableName === TABLE_NAMES.keywords) {
+            if (!value) {
+                return
+            }
+            return getGaps(vbDecode(value))
+        } else {
+            return value
+        }
     }
+
+    const getInternalId = (id) => getValue(TABLE_NAMES.translations, `id-${id}`)
 
     describe('metadata', () => {
         let index
 
         beforeAll(async () => {
-            index = createIndex({ hash, encrypt, decrypt })
+            index = createIndex({ createTransformer })
         })
 
         afterAll(async () => {
@@ -58,8 +90,7 @@ describe('index', () => {
 
         it('should initialize corruption data', async () => {
             await index.initialize()
-            const value = await getValue(TABLE_NAMES.metadata, 'T_E_S_T')
-            expect(value)
+            expect(await getValue(TABLE_NAMES.metadata, 'T_E_S_T'))
                 .toEqual('TEST')
         })
 
@@ -72,7 +103,14 @@ describe('index', () => {
 
         it('should fail when encryption information is different', async () => {
             await index.initialize()
-            const index2 = createIndex({ hash, encrypt, decrypt: (x) => x })
+            const otherTransformer = () => ({
+                property: (value) => value,
+                serialize: (k, x) => x,
+                deserialize: (k, x) => x
+            })
+            const index2 = createIndex({
+                createTransformer: otherTransformer
+            })
             const value = await index2.corrupt()
             expect(value)
                 .toBeTruthy()
@@ -81,10 +119,12 @@ describe('index', () => {
 
     describe('store', () => {
         let index
+        let internalId
 
         beforeAll(async () => {
             index = getIndex()
             await index.store(MOCK.ID, MOCK.TOKENS, MOCK.DATA)
+            internalId = await getInternalId(MOCK.ID)
         })
 
         afterAll(async () => {
@@ -95,17 +135,17 @@ describe('index', () => {
         it('should store a link between the keywords and data id', async () => {
             const value = await getValue(TABLE_NAMES.keywords, 'this')
             expect(value[0])
-                .toEqual(MOCK.ID)
+                .toEqual(internalId)
         })
 
         it('should store data', async () => {
-            const value = await getValue(TABLE_NAMES.data, MOCK.ID)
+            const value = await getValue(TABLE_NAMES.data, internalId)
             expect(value.data)
                 .toEqual(MOCK.DATA)
         })
 
         it('should store a link between the data and keywords', async () => {
-            const value = await getValue(TABLE_NAMES.data, MOCK.ID)
+            const value = await getValue(TABLE_NAMES.data, internalId)
             expect(value.keywords)
                 .toEqual(MOCK.TOKENS)
         })
@@ -207,11 +247,16 @@ describe('index', () => {
         })
 
         it('should clean stale data', async () => {
-            await index.store('199', tokenize('unicorn zebra'), { ID: '199' })
-            expect(mapIds(await index.search(['unicorn', 'zebra']))).toEqual(['199'])
-            expect(await getValue(TABLE_NAMES.keywords, 'unicorn')).toEqual(['199'])
-            expect(await getValue(TABLE_NAMES.keywords, 'zebra')).toEqual(['199'])
-            await removeValue(TABLE_NAMES.data, '199')
+            const id = '199'
+            await index.store(id, tokenize('unicorn zebra'), { ID: '199' })
+            const internalId = await getInternalId('199')
+
+            expect(mapIds(await index.search(['unicorn', 'zebra']))).toEqual([id])
+            expect(await getValue(TABLE_NAMES.keywords, 'unicorn')).toEqual([internalId])
+            expect(await getValue(TABLE_NAMES.keywords, 'zebra')).toEqual([internalId])
+
+            await removeValue(TABLE_NAMES.data, internalId)
+
             expect(mapIds(await index.search(['unicorn', 'zebra']))).toEqual([])
             expect(await getValue(TABLE_NAMES.keywords, 'unicorn')).toBeUndefined()
             expect(await getValue(TABLE_NAMES.keywords, 'zebra')).toBeUndefined()
@@ -225,6 +270,7 @@ describe('index', () => {
 
     describe('update', () => {
         let index
+        let internalId
 
         const update = {
             ID: MOCK.ID,
@@ -234,6 +280,7 @@ describe('index', () => {
         beforeAll(async () => {
             index = getIndex()
             await index.store(MOCK.ID, MOCK.TOKENS, MOCK.DATA)
+            internalId = await getInternalId(MOCK.ID)
             await index.update(MOCK.ID, () => update)
         })
 
@@ -243,7 +290,7 @@ describe('index', () => {
         })
 
         it('should update the metadata of the message', async () => {
-            const value = await getValue(TABLE_NAMES.data, MOCK.ID)
+            const value = await getValue(TABLE_NAMES.data, internalId)
             expect(value.data)
                 .toEqual(update)
             expect(value.keywords)
@@ -253,10 +300,12 @@ describe('index', () => {
 
     describe('remove one', () => {
         let index
+        let internalId
 
         beforeAll(async () => {
             index = getIndex()
             await index.store(MOCK.ID, MOCK.TOKENS, MOCK.DATA)
+            internalId = await getInternalId(MOCK.ID)
             await index.remove(MOCK.ID)
         })
 
@@ -266,7 +315,7 @@ describe('index', () => {
         })
 
         it('should remove data', async () => {
-            const value = await getValue(TABLE_NAMES.data, MOCK.ID)
+            const value = await getValue(TABLE_NAMES.data, internalId)
             expect(value)
                 .toBeUndefined()
         })
@@ -280,6 +329,8 @@ describe('index', () => {
 
     describe('remove multiple', () => {
         let index
+        let internalId
+        let internalId2
         const message2 = {
             ID: '321',
             Subject: 'hello'
@@ -288,8 +339,13 @@ describe('index', () => {
 
         beforeAll(async () => {
             index = getIndex()
+
             await index.store(MOCK.ID, MOCK.TOKENS.concat('removed'), MOCK.DATA)
             await index.store(message2.ID, tokenize(body2), message2)
+
+            internalId = await getInternalId(MOCK.ID)
+            internalId2 = await getInternalId(message2.ID)
+
             await index.remove(MOCK.ID)
         })
 
@@ -299,10 +355,10 @@ describe('index', () => {
         })
 
         it('should remove the first instance', async () => {
-            const value = await getValue(TABLE_NAMES.data, MOCK.ID)
+            const value = await getValue(TABLE_NAMES.data, internalId)
             expect(value)
                 .toBeUndefined()
-            const value2 = await getValue(TABLE_NAMES.data, message2.ID)
+            const value2 = await getValue(TABLE_NAMES.data, internalId2)
             expect(value2)
                 .not.toBeUndefined()
         })
@@ -311,7 +367,7 @@ describe('index', () => {
             await Promise.all(tokenize(body2).map(async (token) => {
                 const value = await getValue(TABLE_NAMES.keywords, token)
                 expect(value)
-                    .toEqual(['321'])
+                    .toEqual([internalId2])
             }))
         })
 

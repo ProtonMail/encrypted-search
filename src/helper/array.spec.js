@@ -4,7 +4,10 @@ import {
     intersect,
     union,
     contains,
-    proximity, ordered, quorom
+    proximity,
+    ordered,
+    quorom,
+    insertIntoGapsArray, removeFromGapsArray
 } from './array'
 
 describe('array', () => {
@@ -115,5 +118,26 @@ describe('array', () => {
     it('should not find quorom', () => {
         expect(quorom(['cat', 'dog', 'mouse'], ['cat', 'dog'], 3)).toBeFalsy()
         expect(quorom(['cat', 'dog', 'mouse'], ['cat', 'dog', 'aaa'], 3)).toBeFalsy()
+    })
+
+    it('should insert into gaps array', () => {
+        expect(insertIntoGapsArray([], 2)).toEqual([2])
+        expect(insertIntoGapsArray([2], 1)).toEqual([1, 1])
+        expect(insertIntoGapsArray([2], 3)).toEqual([2, 1])
+        expect(insertIntoGapsArray([2, 3], 3)).toEqual([2, 1, 2])
+        expect(insertIntoGapsArray([5, 5, 10, 10, 20], 25)).toEqual([5, 5, 10, 5, 5, 20])
+        expect(insertIntoGapsArray([5, 5, 10, 10, 20], 6)).toEqual([5, 1, 4, 10, 10, 20])
+
+        expect(insertIntoGapsArray([2, 3], 2)).toBeUndefined()
+        expect(insertIntoGapsArray([2, 5], 2)).toBeUndefined()
+    })
+
+    it('should remove from gaps array', () => {
+        expect(removeFromGapsArray([2, 1, 1], 3)).toEqual([2, 2])
+        expect(removeFromGapsArray([2], 2)).toEqual([])
+        expect(removeFromGapsArray([2, 1], 3)).toEqual([2])
+        expect(removeFromGapsArray([2, 3, 1], 6)).toEqual([2, 3])
+        expect(removeFromGapsArray([5, 5, 10, 10, 20], 5)).toEqual([10, 10, 10, 20])
+        expect(removeFromGapsArray([2, 3], 3)).toBeUndefined()
     })
 })
