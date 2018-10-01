@@ -5,7 +5,8 @@ import createKeywordsStore from './store/keywordStore'
 import createWildcardStore from './store/wildcardStore'
 import createMetadataStore from './store/metadataStore'
 import createTranslationStore from './store/translationStore'
-import createKeyValueStore, { withTransformers } from './store/keyValueStore'
+import createKeyValueStore, { withCache, withTransformers } from './store/keyValueStore'
+import createCache from './helper/lru'
 
 import { unique } from './helper/array'
 
@@ -37,11 +38,19 @@ const assertId = (id) => {
     return !(!id || (type !== 'string' && type !== 'number'))
 }
 
-const defaultCreateTransformer = () => ({
-    property: (key) => key,
-    serialize: (key, value) => value,
-    deserialize: (key, value) => value
-})
+const defaultTransformers = {
+    property: (id, key) => key,
+    serialize: (id, key, value) => value,
+    deserialize: (id, key, value) => value
+}
+
+const buildKvStore = (id, store, transformer, cache) => {
+    const enchancedStore = withTransformers(id, store, transformer)
+    if (!cache) {
+        return enchancedStore
+    }
+    return withCache(enchancedStore, cache)
+}
 
 /**
  * Create the encrypted search index.
@@ -52,7 +61,11 @@ const defaultCreateTransformer = () => ({
  * @param {String} [metadataName='metadata'] - The name of the metadata object store.
  * @param {String} [translationName='translations'] - The name of the translation object store.
  * @param {Number} [closeTimeout=15000] - Timeout before closing the indexedDB connection.
- * @param {Function} createTransformer - Function that returns the property, serialize, and deserialize functions.
+ * @param {Object} transformers - Object containing the property, serialize, and deserialize functions.
+ * @param {Boolean} [useCache=false] - Cache the key-value stores locally.
+ *   NOTE: Enabling this will only give consistent results if you access the encrypted search
+ *   index from one instance. If you write from another instance the cache will become invalid
+ *   and thus give the wrong results.
  * @returns {Object}
  */
 export default ({
@@ -63,7 +76,8 @@ export default ({
     metadataName = 'metadata',
     translationName = 'translations',
     closeTimeout = 15000,
-    createTransformer = defaultCreateTransformer
+    transformers = defaultTransformers,
+    useCache = false
 } = {}) => {
     const open = () => openDb(indexedDB, dbName, DB_VERSION, upgradeDb({
         keywords: keywordsName,
@@ -75,35 +89,52 @@ export default ({
 
     const { getTransaction, close } = openWithClosure(open, closeTimeout)
 
+    const keywordsCache = useCache ? createCache() : undefined
     const keywordsStore = createKeywordsStore(
-        withTransformers(
+        buildKvStore(
+            TABLES.KEYWORDS,
             createKeyValueStore(keywordsName),
-            createTransformer(TABLES.KEYWORDS)
+            transformers,
+            keywordsCache
         )
     )
+
+    const wildcardsCache = useCache ? createCache() : undefined
     const wildcardStore = createWildcardStore(
-        withTransformers(
+        buildKvStore(
+            TABLES.WILDCARDS,
             createKeyValueStore(wildcardsName),
-            createTransformer(TABLES.WILDCARDS)
+            transformers,
+            wildcardsCache
         )
     )
+
+    const dataCache = useCache ? createCache() : undefined
     const dataStore = createDataStore(
-        withTransformers(
+        buildKvStore(
+            TABLES.DATA ,
             createKeyValueStore(dataName),
-            createTransformer(TABLES.DATA)
+            transformers,
+            dataCache
         )
     )
+
     const metadataStore = createMetadataStore(
-        withTransformers(
+        buildKvStore(
+            TABLES.METADATA,
             createKeyValueStore(metadataName),
-            createTransformer(TABLES.METADATA)
+            transformers
         ),
         getTransaction
     )
+
+    const translationCache = useCache ? createCache() : undefined
     const translationStore = createTranslationStore(
-        withTransformers(
+        buildKvStore(
+            TABLES.TRANSLATIONS,
             createKeyValueStore(translationName),
-            createTransformer(TABLES.TRANSLATIONS)
+            transformers,
+            translationCache
         ),
         getTransaction
     )
@@ -268,6 +299,16 @@ export default ({
         return wildcardStore.search(query, tx)
     }
 
+    const clearCache = () => {
+        if (!useCache) {
+            return
+        }
+        dataCache.clear()
+        keywordsCache.clear()
+        wildcardsCache.clear()
+        translationCache.clear()
+    }
+
     /**
      * Clear all tables.
      * @return {Promise}
@@ -275,6 +316,8 @@ export default ({
     const clear = async () => {
         const tx = await getTransaction([dataName, keywordsName, wildcardsName, metadataName, translationName], READWRITE)
         const promise = transaction(tx)
+
+        clearCache()
 
         dataStore.clear(tx)
         keywordsStore.clear(tx)
@@ -343,6 +386,7 @@ export default ({
         update,
         remove,
         clear,
+        clearCache,
         corrupt,
         numberOfKeywords,
         stats,

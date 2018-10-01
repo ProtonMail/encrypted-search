@@ -2,7 +2,37 @@ import { request } from '../helper/idb'
 import sizeof from '../helper/sizeof'
 
 /**
+ * Enhance a key-value store with caching.
+ * @param {key-value store} store
+ * @param {Cache} cache
+ * @returns {Object}
+ */
+export const withCache = (store, { set, get, remove }) => {
+    return {
+        ...store,
+        set: (key, value, tx) => {
+            set(key, value)
+            return store.set(key, value, tx)
+        },
+        get: async (key, tx) => {
+            const cachedValue = get(key)
+            if (cachedValue) {
+                return cachedValue
+            }
+            const value = await store.get(key, tx)
+            set(key, value)
+            return value
+        },
+        remove: (key, tx) => {
+            remove(key)
+            return store.remove(key, tx)
+        }
+    }
+}
+
+/**
  * Enhance a key-value store with transformer functions.
+ * @param {Number} id
  * @param {key-value store} store
  * @param {String} table
  * @param {Function} property
@@ -10,23 +40,18 @@ import sizeof from '../helper/sizeof'
  * @param {Function} deserialize
  * @returns {Object}
  */
-export const withTransformers = (store, { property, serialize, deserialize }) => {
+export const withTransformers = (id, store, { property, serialize, deserialize }) => {
     return {
         ...store,
         set: (key, value, tx) => {
-            const serializedValue = typeof value === 'undefined' ?
-                undefined : serialize(key, value)
-
-            return store.set(property(key), serializedValue, tx)
+            return store.set(property(id, key), serialize(id, key, value), tx)
         },
         get: async (key, tx) => {
-            const encryptedValue = await store.get(property(key), tx)
-
-            return typeof encryptedValue === 'undefined' ?
-                undefined : deserialize(key, encryptedValue)
+            const encryptedValue = await store.get(property(id, key), tx)
+            return deserialize(id, key, encryptedValue)
         },
         remove: (key, tx) => {
-            return store.remove(property(key), tx)
+            return store.remove(property(id, key), tx)
         }
     }
 }

@@ -16,4 +16,4 @@ export {
 
 export { default as parse } from './query/parser'
 
-export { default as create } from './master'
+export { default as create, TABLES } from './master'

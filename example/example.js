@@ -26,8 +26,8 @@ const init = async () => {
         <div class="results" style="white-space: pre-wrap"></div>
     `
 
-    const { hash, encrypt, decrypt } = createEncryptionHelper(key, salt)
-    const index = create({ hash, encrypt, decrypt })
+    const transformers = createEncryptionHelper(key, salt)
+    const index = create({ transformers })
 
     await index.store('123', tokenize('this is a long string that can be searched'), { data: { etc: 1 } })
     await index.store('124', tokenize('this is another document that is inserted into the index'), { data: { etc: 123121 } })

@@ -12,7 +12,7 @@
         "postinstall": "npm run build"
     },
     "dependencies": {
-      "pegjs": "^0.10.0"
+        "latenize": "^0.2.0"
     },
     "devDependencies": {
         "eslint": "^5.1.0",
@@ -28,8 +28,5 @@
         "rollup-plugin-node-resolve": "^3.3.0",
         "asmcrypto.js": "^2.3.0",
         "tweetnacl": "^1.0.0"
-    },
-    "dependencies": {
-        "latenize": "^0.2.0"
     }
 }

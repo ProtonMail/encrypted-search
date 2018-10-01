@@ -1,19 +1,19 @@
 import { create as createIndex, tokenize, query, parse } from '../index.esm'
-import createEncryptionHelper, { transformer } from '../../example/helper/encryptionHelper'
+import createEncryptionHelper from '../../example/helper/encryptionHelper'
 
 const indexKey = new Uint8Array(32)
 const indexSalt = new Uint8Array(32)
 
-const encryptionHelper = createEncryptionHelper(indexKey, indexSalt)
-const createTransformer = transformer(encryptionHelper)
+const transformers = createEncryptionHelper(indexKey, indexSalt)
 
 describe('query', () => {
-    const getIndex = () => createIndex({ createTransformer })
+    const getIndex = () => createIndex({ transformers })
 
     let index
 
     beforeAll(async () => {
         index = await getIndex()
+        await index.clear()
 
         await index.store('123', tokenize('hello world!'))
         await index.store('124', tokenize('cat aaa bbb ccc mouse ddd dog'))
@@ -45,79 +45,83 @@ describe('query', () => {
     })
 
     const mapIds = (result = []) => result.map(({ id }) => id)
+    const sort = (array = []) => {
+        array.sort()
+        return array
+    }
 
-    const search = async (string) => mapIds(await query(index.search, index.wildcard, parse(string)))
+    const search = async (string) => sort(mapIds(await query(index.search, index.wildcard, parse(string))))
 
     it('should return results for a simple word', async () => {
         expect(await search('hello'))
-            .toEqual(['123', '129'])
+            .toEqual(sort(['123', '129']))
     })
 
     it('should return results for a wildcard query', async () => {
         expect(await search('he*'))
-            .toEqual(['123', '129'])
+            .toEqual(sort(['123', '129']))
     })
 
     it('should return results for a wildcard query with AND', async () => {
         expect(await search('ro* *sso*'))
-            .toEqual(['303', '304'])
+            .toEqual(sort(['303', '304']))
     })
 
     it('should return results for a wildcard query with OR', async () => {
         expect(await search('to* | *ell*'))
-            .toEqual(['300', '301', '302', '123', '129'])
+            .toEqual(sort(['300', '301', '302', '123', '129']))
     })
 
     it('should return results for a AND query', async () => {
         expect(await search('hello world'))
-            .toEqual(['123'])
+            .toEqual(sort(['123']))
     })
 
     it('should return results for a AND NOT query', async () => {
         expect(await search('hello !world'))
-            .toEqual(['129'])
+            .toEqual(sort(['129']))
     })
 
     it('should return results for a AND NOT query with wildcard', async () => {
         expect(await search('he* !wor*'))
-            .toEqual(['129'])
+            .toEqual(sort(['129']))
     })
 
     it('should return results for keyword modifiers query', async () => {
         expect(await search('^hello$'))
-            .toEqual(['129'])
+            .toEqual(sort(['129']))
         expect(await search('^aaa'))
-            .toEqual(['128'])
+            .toEqual(sort(['128']))
         expect(await search('cat$'))
-            .toEqual(['128'])
+            .toEqual(sort(['128']))
     })
 
     it('should return results for a OR query', async () => {
         expect(await search('hello | cat'))
-            .toEqual(['123', '129', '124', '125', '126', '127', '128'])
+            .toEqual(sort(['123', '129', '124', '125', '126', '127', '128']))
     })
 
     it('should return results for a PHRASE query with single wildcard', async () => {
         expect(await search('"cat * mouse"'))
-            .toEqual(['126', '127'])
+            .toEqual(sort(['126', '127']))
     })
 
     it('should return results for a PHRASE query with wildcard', async () => {
         expect(await search('"ca* * *mou*"'))
-            .toEqual(['126', '127'])
+            .toEqual(sort(['126', '127']))
     })
 
     it('should return results for a PHRASE query with phrase modifier', async () => {
         expect(await search('"^he*$"'))
-            .toEqual(['129'])
+            .toEqual(sort(['129']))
         expect(await search('"^hello$"'))
-            .toEqual(['129'])
+            .toEqual(sort(['129']))
         expect(await search('"^5 6"'))
-            .toEqual(['202'])
+            .toEqual(sort(['202']))
         expect(await search('"6 7$"'))
-            .toEqual(['200'])
+            .toEqual(sort(['200']))
         expect(await search('"^12 13 14 15 16$"'))
-            .toEqual(['207'])
+            .toEqual(sort(['207']))
     })
 
     it('should return results for a PHRASE query', async () => {
@@ -134,7 +138,7 @@ describe('query', () => {
 
     it('should return results for a QUOROM query', async () => {
         expect(await search('"achilles tortoise"/2'))
-            .toEqual(['300', '301', '302'])
+            .toEqual(sort(['300', '301', '302']))
     })
 
     it('should return empty results for a QUOROM query', async () => {
@@ -166,24 +170,24 @@ describe('query', () => {
 
     it('should return results for a complex BEFORE query', async () => {
         expect(await search('1 << 4 << 5 << (6 | 7)'))
-            .toEqual(['200', '201', '204', '205'])
+            .toEqual(sort(['200', '201', '204', '205']))
     })
 
     it('should return results for a complex query', async () => {
         expect(await search('1 << ((4 << (5 << ((6 !10) | (7 !10) | "8 9 10"))))'))
-            .toEqual(['200', '201', '204'])
+            .toEqual(sort(['200', '201', '204']))
         expect(await search('(1 << 4 << 5) << ((6 !10)| (7 !10) | "8 9 10")'))
-            .toEqual(['200', '201', '204'])
+            .toEqual(sort(['200', '201', '204']))
     })
 
     it('should return results for a OR, keyword and AND query', async () => {
         expect(await search('hello | (cat ddd)'))
-            .toEqual(['123', '129', '124'])
+            .toEqual(sort(['123', '129', '124']))
     })
 
     it('should return results for a OR, AND and AND query', async () => {
         expect(await search('(hello world) | (cat ddd)'))
-            .toEqual(['123', '124'])
+            .toEqual(sort(['123', '124']))
     })
 
     it('should return empty results for a AND and AND query', async () => {

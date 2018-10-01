@@ -5,7 +5,7 @@ export const READWRITE = 'readwrite'
  * Open an indexedDB in a promisified way.
  * @param {indexedDB} indexedDB
  * @param {String} name
- * @param {String} version
+ * @param {Number} version
  * @param {Function} upgrade
  * @returns {Promise}
  */
