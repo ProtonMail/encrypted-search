@@ -23,20 +23,20 @@ describe('query', () => {
         await index.store('128', tokenize('aaa mouse cat'))
         await index.store('129', tokenize('hello'))
 
-        await index.store('200', tokenize('1 2 3 4 5 6 7', 0))
-        await index.store('201', tokenize('1 4 5 7', 0))
-        await index.store('202', tokenize('5 6 7 1 2 3 4', 0))
-        await index.store('203', tokenize('7 6 5 4 3 2 1', 0))
-        await index.store('204', tokenize('1 2 3 4 5 6 7 8 9 10', 0))
-        await index.store('205', tokenize('1 2 3 4 5 6 7 10 9 8', 0))
-        await index.store('206', tokenize('11 12 13 14 15 16', 0))
-        await index.store('207', tokenize('12 13 14 15 16', 0))
+        await index.store('200', tokenize('1 2 3 4 5 6 7', 1))
+        await index.store('201', tokenize('1 4 5 7', 1))
+        await index.store('202', tokenize('5 6 7 1 2 3 4', 1))
+        await index.store('203', tokenize('7 6 5 4 3 2 1', 1))
+        await index.store('204', tokenize('1 2 3 4 5 6 7 8 9 10', 1))
+        await index.store('205', tokenize('1 2 3 4 5 6 7 10 9 8', 1))
+        await index.store('206', tokenize('11 12 13 14 15 16', 1))
+        await index.store('207', tokenize('12 13 14 15 16', 1))
 
-        await index.store('300', tokenize('Achilles catches the tortoise', 0))
-        await index.store('301', tokenize('Tortoise caught by Achilles', 0))
-        await index.store('302', tokenize('Achilles caught the green tortoise', 0))
-        await index.store('303', tokenize('rock paper scissor', 0))
-        await index.store('304', tokenize('rock paper etc scissor', 0))
+        await index.store('300', tokenize('Achilles catches the tortoise', 1))
+        await index.store('301', tokenize('Tortoise caught by Achilles', 1))
+        await index.store('302', tokenize('Achilles caught the green tortoise', 1))
+        await index.store('303', tokenize('rock paper scissor', 1))
+        await index.store('304', tokenize('rock paper etc scissor', 1))
     })
 
     afterAll(async () => {
@@ -138,6 +138,11 @@ describe('query', () => {
 
     it('should return results for a QUOROM query', async () => {
         expect(await search('"achilles tortoise"/2'))
+            .toEqual(sort(['300', '301', '302']))
+    })
+
+    it('should return results for a QUOROM query with wildcard', async () => {
+        expect(await search('"ach* tortoise"/2'))
             .toEqual(sort(['300', '301', '302']))
     })
 

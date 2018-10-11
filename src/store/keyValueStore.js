@@ -3,37 +3,38 @@ import sizeof from '../helper/sizeof'
 
 /**
  * Enhance a key-value store with caching.
- * @param {key-value store} store
+ * @param {Object} store
  * @param {Cache} cache
  * @returns {Object}
  */
-export const withCache = (store, { set, get, remove }) => {
+export const withCache = (store, { set, get, remove, clear }) => {
     return {
         ...store,
-        set: (key, value, tx) => {
+        put: (tx, value, key) => {
             set(key, value)
-            return store.set(key, value, tx)
+            return store.put(tx, value, key)
         },
-        get: async (key, tx) => {
+        get: async (tx, key) => {
             const cachedValue = get(key)
             if (cachedValue) {
                 return cachedValue
             }
-            const value = await store.get(key, tx)
+            const value = await store.get(tx, key)
             set(key, value)
             return value
         },
-        remove: (key, tx) => {
+        remove: (tx, key) => {
             remove(key)
-            return store.remove(key, tx)
-        }
+            return store.remove(tx, key)
+        },
+        clearCache: clear
     }
 }
 
 /**
  * Enhance a key-value store with transformer functions.
  * @param {Number} id
- * @param {key-value store} store
+ * @param {Object} store
  * @param {String} table
  * @param {Function} property
  * @param {Function} serialize
@@ -43,15 +44,15 @@ export const withCache = (store, { set, get, remove }) => {
 export const withTransformers = (id, store, { property, serialize, deserialize }) => {
     return {
         ...store,
-        set: (key, value, tx) => {
-            return store.set(property(id, key), serialize(id, key, value), tx)
+        put: (tx, value, key) => {
+            return store.put(tx, serialize(id, key, value), property(id, key))
         },
-        get: async (key, tx) => {
-            const encryptedValue = await store.get(property(id, key), tx)
+        get: async (tx, key) => {
+            const encryptedValue = await store.get(tx, property(id, key))
             return deserialize(id, key, encryptedValue)
         },
-        remove: (key, tx) => {
-            return store.remove(property(id, key), tx)
+        remove: (tx, key) => {
+            return store.remove(tx, property(id, key))
         }
     }
 }
@@ -82,13 +83,13 @@ export default (tableName = '') => {
                 }
             })
         },
-        set: (key = '', value, tx) => {
+        put: (tx, value, key) => {
             return tx.objectStore(tableName).put(value, key)
         },
-        get: (key = '', tx) => {
+        get: (tx, key) => {
             return request(tx.objectStore(tableName).get(key))
         },
-        remove: (key = '', tx) => {
+        remove: (tx, key) => {
             return tx.objectStore(tableName).delete(key)
         },
         clear: (tx) => {

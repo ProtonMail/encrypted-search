@@ -16,32 +16,32 @@ const wt = (tf) => (tf > 0 ? 1 + Math.log10(tf) : 0)
 /**
  * Generate a ranking based on cosine similarity scoring.
  * https://nlp.stanford.edu/IR-book/html/htmledition/computing-vector-scores-1.html
- * @param {Array} keywords The keywords in the query.
- * @param {Array} keywordsToIds Each keyword mapped to a list of document IDs.
+ * @param {Array} terms The terms in the query.
+ * @param {Array} termsToIds Each keyword mapped to a list of document IDs.
  * @param {Number} N The number of documents in this corpus.
- * @param {Object} idsToKeywords Result id to list of keywords.
+ * @param {Object} idsToTerms Result id to list of terms.
  */
-export default ({ keywords = [], keywordsToIds = [], N = 0, idsToKeywords = {} }) => {
-    if (!Array.isArray(keywords) || !Array.isArray(keywordsToIds) || keywords.length !== keywordsToIds.length) {
+export default ({ terms = [], termsToIds = [], N = 0, idsToTerms = {} }) => {
+    if (!Array.isArray(terms) || !Array.isArray(termsToIds) || terms.length !== termsToIds.length) {
         throw new Error('Keyword array exception')
     }
-    if (keywordsToIds.some((keywordToIds = []) => !Array.isArray(keywordToIds))) {
+    if (termsToIds.some((keywordToIds = []) => !Array.isArray(keywordToIds))) {
         throw new Error('Keyword to IDs array exception')
     }
-    if (Object.keys(idsToKeywords).some((id) => !Array.isArray(idsToKeywords[id] || []))) {
-        throw new Error('IDs to keywords array exception')
+    if (Object.keys(idsToTerms).some((id) => !Array.isArray(idsToTerms[id] || []))) {
+        throw new Error('IDs to terms array exception')
     }
 
     const result = {}
 
-    keywords.forEach((keyword, i) => {
-        const keywordToIds = keywordsToIds[i] || []
+    terms.forEach((keyword, i) => {
+        const keywordToIds = termsToIds[i] || []
         const termFrequencyInCorpus = keywordToIds.length
         const inverseTermDocumentFrequency = idf(N, termFrequencyInCorpus)
-        const queryTermWeight = (1 / keywords.length) * inverseTermDocumentFrequency
+        const queryTermWeight = (1 / terms.length) * inverseTermDocumentFrequency
 
         keywordToIds.forEach((id) => {
-            const documentKeywords = idsToKeywords[id] || []
+            const documentKeywords = idsToTerms[id] || []
 
             const termFrequencyInDocument = documentKeywords
                 .filter((documentKeyword) => documentKeyword === keyword)
@@ -55,7 +55,7 @@ export default ({ keywords = [], keywordsToIds = [], N = 0, idsToKeywords = {} }
 
     // Normalize scores.
     Object.keys(result).forEach((id) => {
-        const documentKeywords = idsToKeywords[id] || []
+        const documentKeywords = idsToTerms[id] || []
         const len = documentKeywords.length
         result[id] = len > 0 ? result[id] / len : 0
     })

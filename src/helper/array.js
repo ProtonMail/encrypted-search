@@ -1,12 +1,28 @@
+const defaultExtractor = (a) => a
 const defaultComparator = (a, b) => a === b
 const defaultTransformer = (a) => a
+
 /**
  * Get unique values from an array.
  * @param {Array} array
- * @param {Function} comparator
+ * @param {Function} extractor
  * @return {Array}
  */
-export const unique = (array = [], comparator = defaultComparator) => array.filter((value, index, self) => self.findIndex((x) => comparator(value, x)) === index)
+export const unique = (array, extractor = defaultExtractor) => {
+    const seen = new Set()
+    const length = array.length
+    const result = []
+    for (let i = 0; i < length; i++) {
+        const value = array[i]
+        const extract = extractor(value)
+        if (seen.has(extract)) {
+            continue
+        }
+        seen.add(extract)
+        result.push(value)
+    }
+    return result
+}
 
 /**
  * Flatten an array one level.
@@ -16,17 +32,35 @@ export const unique = (array = [], comparator = defaultComparator) => array.filt
 export const flatten = (array = []) => Array.prototype.concat(...array)
 
 /**
+ *
+ * @param {Array} a The first array.
+ * @param {Array} b The second array.
+ * @param {Function} extractor
+ * @returns {Array}
+ */
+export const minus = (a = [], b = [], extractor = defaultExtractor) => {
+    const other = new Set(b.map(extractor))
+    return a.reduce((prev, cur) => {
+        const val = extractor(cur)
+        if (!other.has(val)) {
+            prev.push(cur)
+        }
+        return prev
+    }, [])
+}
+
+/**
  * Intersect two arrays. Ignoring any duplicates.
  * @param {Array} a The first array.
  * @param {Array} b The second array.
- * @param {Function} comparator A comparator function to compare a value in array a with a value in array b.
+ * @param {Function} extractor
  * @param {Function} transformer A transformer function to transform the two values.
  * @returns {Array}
  */
-export const intersect = (a = [], b = [], comparator = defaultComparator, transformer = defaultTransformer) => {
-    return unique(a, comparator)
+export const intersect = (a = [], b = [], extractor = defaultExtractor, transformer = defaultTransformer) => {
+    return unique(a, extractor)
         .reduce((acc, cur) => {
-            const idx = b.findIndex((x) => comparator(cur, x))
+            const idx = b.findIndex((x) => extractor(cur) === extractor(x))
             if (idx === -1) {
                 return acc
             }
@@ -42,16 +76,16 @@ export const intersect = (a = [], b = [], comparator = defaultComparator, transf
  * Join two arrays. Ignoring any duplicates.
  * @param {Array} a The first array.
  * @param {Array} b The second array.
- * @param {Function} comparator A comparator function to compare a value in array a with a value in array b.
+ * @param {Function} extractor A extractor function read the value to compare
  * @param {Function} transformer A transformer function to transform the two values.
  * @returns {Array}
  */
-export const union = (a = [], b = [], comparator = defaultComparator, transformer = defaultTransformer) => {
+export const union = (a = [], b = [], extractor = defaultExtractor, transformer = defaultTransformer) => {
     const duplicates = {}
-    const union = [...unique(a, comparator), ...unique(b, comparator)]
+    const union = [...unique(a, extractor), ...unique(b, extractor)]
     return union
         .reduce((acc, cur, index) => {
-            const idx = union.findIndex((x, findex) => index !== findex && comparator(cur, x))
+            const idx = union.findIndex((x, findex) => index !== findex && extractor(cur) === extractor(x))
             if (idx === -1) {
                 acc.push(transformer(cur))
                 return acc
@@ -169,11 +203,47 @@ export const proximity = (a = [], b = [], n, comparator = defaultComparator) => 
 export const quorom = (a = [], b = [], n, comparator = defaultComparator) => {
     let counter = 0
     return b.some((keyword) => {
-        if (a.findIndex((y) => comparator(keyword, y)) !== -1) {
+        if (a.findIndex((y) => comparator(y, keyword)) !== -1) {
             counter++
         }
         return counter >= n
     })
+}
+
+/**
+ * Convert an array to a gaps array
+ * (Inline for performance)
+ * @param {Array<Number>} arr
+ * @returns {Array<Number>}
+ */
+export const getGapsArray = (arr = []) => {
+    if (arr.length <= 1) {
+        return arr
+    }
+    arr.sort((a, b) => a - b)
+    let prev = arr[0]
+    for (let i = 1; i < arr.length; ++i) {
+        const value = arr[i]
+        arr[i] = arr[i] - prev
+        prev = value
+    }
+    return arr
+}
+
+/**
+ * Convert an array to a gaps array
+ * (Inline for performance)
+ * @param {Array<Number>} arr
+ * @returns {Array<Number>}
+ */
+export const getArrayGaps = (arr = []) => {
+    if (arr.length <= 1) {
+        return arr
+    }
+    for (let i = 1; i < arr.length; ++i) {
+        arr[i] = arr[i] + arr[i - 1]
+    }
+    return arr
 }
 
 /**
@@ -183,7 +253,8 @@ export const quorom = (a = [], b = [], n, comparator = defaultComparator) => {
  * @returns {Array|undefined} Returns undefined if the item already exists
  */
 export const insertIntoGapsArray = (array = [], id) => {
-    if (array.length === 0) {
+    const len = array.length
+    if (len === 0) {
         return [id]
     }
 
@@ -204,12 +275,12 @@ export const insertIntoGapsArray = (array = [], id) => {
         prevValue = currentValue
 
         i++
-    } while (i < array.length)
+    } while (i < len)
 
     if (i === 0) {
         array.unshift(id)
         array[1] = array[1] - id
-    } else if (i === array.length) {
+    } else if (i === len) {
         array.push(id - prevValue)
     } else {
         array.splice(i, 0, id - prevValue)
@@ -220,7 +291,8 @@ export const insertIntoGapsArray = (array = [], id) => {
 }
 
 export const removeFromGapsArray = (array = [], id) => {
-    if (array.length === 0) {
+    const len = array.length
+    if (len === 0) {
         return []
     }
 
@@ -234,12 +306,12 @@ export const removeFromGapsArray = (array = [], id) => {
         }
         prevValue = currentValue
         i++
-    } while (i < array.length)
+    } while (i < len)
 
-    if (i === array.length) {
+    if (i === len) {
         return
     }
-    if (i === array.length - 1) {
+    if (i === len - 1) {
         array.splice(i, 1)
         return array
     }

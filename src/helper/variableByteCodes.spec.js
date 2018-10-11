@@ -29,9 +29,10 @@ describe('vb', () => {
         expectDecode([1,128,2,128,3])
         expectDecode([5000, 100, 0])
         expectDecode([4294967295])
+        expectDecode([17,1,1,1,1,1,1])
     })
 
-    it('should decode and encode all 2 exponent numbers up to 51 bits correctly', () => {
+    it('should decode and encode all unsigned 2 exponent numbers up to 51 bits correctly', () => {
         const array = []
         let onebit = 1
         let allbits = 1

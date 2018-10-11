@@ -1,19 +1,22 @@
-import { extractQueryTokenPadding, splitTokenPadding, wildcardMatch } from '../helper/wildcard'
-import { unique } from '../helper/array'
+import { extractQueryTokenPadding, splitTokenPadding } from '../helper/wildcard'
+import { getArrayGaps, getGapsArray, unique } from '../helper/array'
+import { READWRITE, transaction } from '../helper/idb'
+import { vbDecode, vbEncode } from '../helper/variableByteCodes'
 
 /**
- * Split a list of keywords to a list of splitted tokens -> keywords map.
- * @param {Array} keywords
+ * Split a list of terms to a list of splitted tokens -> term id map.
+ * @param {Array<String>} stringTerms
+ * @param {Array<Number>} terms
  * @returns {Object}
  */
-const splitToKeyword = (keywords = []) => {
-    return keywords.reduce((acc, keyword) => {
-        const tokens = splitTokenPadding(keyword)
+const splitToMap = (stringTerms, terms) => {
+    return stringTerms.reduce((acc, stringTerm, i) => {
+        const tokens = splitTokenPadding(stringTerm)
         tokens.forEach((token) => {
             if (!acc[token]) {
                 acc[token] = []
             }
-            acc[token].push(keyword)
+            acc[token].push(terms[i])
         })
         return acc
     }, {})
@@ -22,85 +25,111 @@ const splitToKeyword = (keywords = []) => {
 /**
  * Wildcard database helper.
  * Handles all logic around storing and finding wildcards.
- * @param {key-value store} store
+ * @param {Object} store
+ * @param {Function} getTransaction
  * @returns {Object}
  */
-export default (store) => {
+export default (store, getTransaction) => {
+    const table = store.name
+
+    /**
+     * @param {String} token
+     * @param {IDBTransaction} tx
+     * @returns {Promise<Array>}
+     */
+    const getList = (token, tx) => {
+        return store.get(tx, token)
+            .then((result) => getArrayGaps(vbDecode(result)))
+    }
+
+    /**
+     * @param {String} token
+     * @param {Array} list
+     * @param {IDBTransaction} tx
+     */
+    const setList = (token, list, tx) => {
+        store.put(tx, vbEncode(getGapsArray(list)), token)
+    }
+
     /**
      * Insert a token-keyword mapping.
      * @param {String} token
-     * @param {Array} keywords
+     * @param {Array} terms
      * @param {IDBTransaction} tx
-     * @returns {Promise}
      */
-    const insertLink = async (token = '', keywords = [], tx) => {
-        const result = await store.get(token, tx)
-        const oldValues = result || []
-        const newValues = unique(oldValues.concat(keywords))
-        return store.set(token, newValues, tx)
+    const insertLink = async (token = '', terms = [], tx) => {
+        const oldValues = await getList(token, tx)
+        const newValues = unique(oldValues.concat(terms))
+        setList(token, newValues, tx)
     }
 
     /**
-     * Store wildcards <-> keywords
-     * @param {Array} keywords
-     * @param {IDBTransaction} tx
+     * Store wildcards <-> terms
+     * @param {Array<String>} stringTerms
+     * @param {Array<Number>} terms
      * @returns {Promise}
      */
-    const insert = (keywords, tx) => {
-        const map = splitToKeyword(keywords)
-        return Promise.all(Object.keys(map)
-            .map((token) => insertLink(token, map[token], tx)))
+    const insertBulk = async (stringTerms, terms) => {
+        const tx = await getTransaction(table, READWRITE)
+        const map = splitToMap(stringTerms, terms)
+        const promise = transaction(tx)
+        Object.keys(map)
+            .forEach((token) => insertLink(token, map[token], tx))
+        return promise
     }
 
     /**
-     * Get a list of keywords from a wildcard pattern.
+     * Get a list of term ids from a wildcard pattern.
      * @param {String} query Wildcard pattern
-     * @param {IDBTransaction} tx
-     * @returns {Promise}
+     * @returns {Promise<Array<Number>>}
      */
-    const search = async (query = '', tx) => {
+    const get = async (query) => {
         const queryToken = extractQueryTokenPadding(query)
-        const results = (await store.get(queryToken, tx)) || []
-        return results
-            .filter((token) => wildcardMatch(token, query))
+        const tx = await getTransaction(table)
+        return getList(queryToken, tx)
     }
 
     /**
      * Remove a keyword-id mapping.
      * If it was the only id, remove the keyword completely.
      * @param {String} token
-     * @param {Array} keywords
+     * @param {Array} terms
      * @param {IDBTransaction} tx
      * @returns {Promise}
      */
-    const removeLink = async (token = '', keywords = [], tx) => {
-        const result = await store.get(token, tx)
-        const oldValues = result || []
-        const newValues = oldValues.filter((aKeyword) => !keywords.some((keyword) => keyword === aKeyword))
+    const removeLink = async (token = '', terms = [], tx) => {
+        const oldValues = await getList(token, tx)
+        const newValues = oldValues.filter((aTerm) => !terms.some((term) => term === aTerm))
         if (newValues.length === 0) {
-            return store.remove(token, tx)
+            store.remove(tx, token)
+            return
         }
-        return store.set(token, newValues, tx)
+        setList(token, newValues, tx)
     }
 
     /**
      * Remove a list of keyword-id mapping
-     * @param {Array} keywords
-     * @param {IDBTransaction} tx
+     * @param {Array<String>} stringTerms
+     * @param {Array<Number>} terms
      * @returns {Promise}
      */
-    const remove = (keywords = [], tx) => {
-        const map = splitToKeyword(keywords)
-        return Promise.all(Object.keys(map)
-            .map((token) => removeLink(token, map[token], tx)))
+    const removeBulk = async (stringTerms = [], terms) => {
+        const map = splitToMap(stringTerms, terms)
+        const tx = await getTransaction(table, READWRITE)
+        const promise = transaction(tx)
+        Object.keys(map)
+            .forEach((token) => removeLink(token, map[token], tx))
+        return promise
     }
 
     return {
-        insert,
-        search,
-        remove,
+        insertBulk,
+        get,
+        removeBulk,
+        name: store.name,
         count: store.count,
         size: store.size,
-        clear: store.clear
+        clear: store.clear,
+        clearCache: store.clearCache
     }
 }

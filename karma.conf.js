@@ -7,8 +7,8 @@ module.exports = (config) => {
         client: {
             jasmine: {
                 random: true,
-                stopOnFailure: true,
-                failFast: true,
+                stopOnFailure: false,
+                failFast: false,
                 timeoutInterval: 2000
             }
         },

@@ -20,8 +20,8 @@ export const transform = (content = '') =>
  * @param {Boolean} stripSpecial
  * @return {Array}
  */
-export default (content = '', len = 1, stripSpecial = true) =>
+export default (content = '', len = 2, stripSpecial = true) =>
     (stripSpecial ? content.replace(/[!"#()%<>:;{}[\]/\\|?.,'`´*¨°^±≈§∞$£@©€™~–…›‹¸˛]/g, ' ') : content)
         .split(/[\s]+/)
         .map(transform)
-        .filter((s) => s.length > len)
+        .filter((s) => s.length >= len)

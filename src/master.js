@@ -1,35 +1,60 @@
 import { open as openDb, transaction, READWRITE, openWithClosure } from './helper/idb'
 
-import createDataStore from './store/dataStore'
-import createKeywordsStore from './store/keywordStore'
+import createPostingsStore from './store/postingsStore'
+import createPositionsStore from './store/positionsStore'
 import createWildcardStore from './store/wildcardStore'
 import createMetadataStore from './store/metadataStore'
-import createTranslationStore from './store/translationStore'
+import createTransposeStore from './store/transposeStore'
 import createKeyValueStore, { withCache, withTransformers } from './store/keyValueStore'
 import createCache from './helper/lru'
 
-import { unique } from './helper/array'
+import { flatten, unique } from './helper/array'
+import { wildcardMatch } from './helper/wildcard'
 
 const DB_VERSION = 1
 const INTEGRITY_KEY = 'T_E_S_T'
 const INTEGRITY_VALUE = 'TEST'
 
 export const TABLES = {
-    KEYWORDS: 1,
-    DATA: 2,
-    WILDCARDS: 3,
-    METADATA: 4,
-    TRANSLATIONS: 5
+    LEXICON: 1,
+    LEXICON_INVERSE: 2,
+
+    IDS: 3,
+    IDS_INVERSE: 4,
+
+    POSTINGS: 5,
+    POSITIONS: 6,
+    WILDCARDS: 7,
+    METADATA: 8
 }
 
-const upgradeDb = ({ keywords, data, metadata, wildcards, translations }) => (db, oldVersion) => {
+export const DEFAULT_NAMES = {
+    db: 'index',
+    [TABLES.LEXICON]: 'lexicon',
+    [TABLES.LEXICON_INVERSE]: 'lexicon_inverse',
+    [TABLES.IDS]: 'ids',
+    [TABLES.IDS_INVERSE]: 'ids_inverse',
+    [TABLES.POSTINGS]: 'postings',
+    [TABLES.POSITIONS]: 'positions',
+    [TABLES.WILDCARDS]: 'wildcards',
+    [TABLES.METADATA]: 'metadata'
+}
+
+const upgradeDb = (names) => (db, oldVersion) => {
     switch (oldVersion) {
-        case 0:
-            db.createObjectStore(metadata)
-            db.createObjectStore(keywords)
-            db.createObjectStore(data)
-            db.createObjectStore(wildcards)
-            db.createObjectStore(translations)
+        case 0: {
+            [
+                TABLES.LEXICON,
+                TABLES.IDS,
+                TABLES.LEXICON_INVERSE,
+                TABLES.IDS_INVERSE,
+                TABLES.POSTINGS,
+                TABLES.POSITIONS,
+                TABLES.WILDCARDS,
+                TABLES.METADATA
+            ].forEach((table) => db.createObjectStore(names[table]))
+            break
+        }
     }
 }
 
@@ -38,295 +63,101 @@ const assertId = (id) => {
     return !(!id || (type !== 'string' && type !== 'number'))
 }
 
-const defaultTransformers = {
+const DEFAULT_TRANSFORMERS = {
     property: (id, key) => key,
     serialize: (id, key, value) => value,
     deserialize: (id, key, value) => value
 }
 
 const buildKvStore = (id, store, transformer, cache) => {
-    const enchancedStore = withTransformers(id, store, transformer)
-    if (!cache) {
-        return enchancedStore
-    }
-    return withCache(enchancedStore, cache)
+    return withCache(withTransformers(id, store, transformer), cache)
 }
 
 /**
  * Create the encrypted search index.
- * @param {String} [dbName='index'] - The name of this database.
- * @param {String} [dataName='data'] - The name of the data object store.
- * @param {String} [keywordsName='keywords'] - The name of the keywords object store.
- * @param {String} [wildcardsName='wildcards'] - The name of the wildcards object store.
- * @param {String} [metadataName='metadata'] - The name of the metadata object store.
- * @param {String} [translationName='translations'] - The name of the translation object store.
- * @param {Number} [closeTimeout=15000] - Timeout before closing the indexedDB connection.
- * @param {Object} transformers - Object containing the property, serialize, and deserialize functions.
- * @param {Boolean} [useCache=false] - Cache the key-value stores locally.
- *   NOTE: Enabling this will only give consistent results if you access the encrypted search
- *   index from one instance. If you write from another instance the cache will become invalid
- *   and thus give the wrong results.
+ * @param {Object} options
  * @returns {Object}
  */
-export default ({
-    dbName = 'index',
-    dataName = 'data',
-    keywordsName = 'keywords',
-    wildcardsName = 'wildcards',
-    metadataName = 'metadata',
-    translationName = 'translations',
-    closeTimeout = 15000,
-    transformers = defaultTransformers,
-    useCache = false
-} = {}) => {
-    const open = () => openDb(indexedDB, dbName, DB_VERSION, upgradeDb({
-        keywords: keywordsName,
-        data: dataName,
-        wildcards: wildcardsName,
-        metadata: metadataName,
-        translations: translationName
-    }))
+export default (options = {}) => {
+    const names = { ...DEFAULT_NAMES, ...options.names, }
+    const transformers = { ...DEFAULT_TRANSFORMERS, ...options.transformers }
+    const closeTimeout = options.closeTimeout || 15000
+
+    const open = () => openDb(indexedDB, names.db, DB_VERSION, upgradeDb(names))
 
     const { getTransaction, close } = openWithClosure(open, closeTimeout)
 
-    const keywordsCache = useCache ? createCache() : undefined
-    const keywordsStore = createKeywordsStore(
-        buildKvStore(
-            TABLES.KEYWORDS,
-            createKeyValueStore(keywordsName),
-            transformers,
-            keywordsCache
-        )
+    const lexiconStore = createTransposeStore(
+        withCache(
+            withTransformers(
+                TABLES.LEXICON,
+                createKeyValueStore(names[TABLES.LEXICON]), transformers),
+            createCache()
+        ),
+        withCache(
+            withTransformers(
+                TABLES.LEXICON_INVERSE,
+                createKeyValueStore(names[TABLES.LEXICON_INVERSE]), transformers),
+            createCache()
+        ),
+        getTransaction
     )
 
-    const wildcardsCache = useCache ? createCache() : undefined
+    const idsStore = createTransposeStore(
+        withCache(
+            withTransformers(
+                TABLES.IDS,
+                createKeyValueStore(names[TABLES.IDS]), transformers),
+            createCache()
+        ),
+        withCache(
+            withTransformers(
+                TABLES.IDS_INVERSE,
+                createKeyValueStore(names[TABLES.IDS_INVERSE]), transformers),
+            createCache()
+        ),
+        getTransaction
+    )
+
+    const postingsStore = createPostingsStore(
+        buildKvStore(
+            TABLES.POSTINGS,
+            createKeyValueStore(names[TABLES.POSTINGS]),
+            transformers,
+            createCache()
+        ),
+        getTransaction
+    )
+
+    const positionsStore = createPositionsStore(
+        buildKvStore(
+            TABLES.POSITIONS,
+            createKeyValueStore(names[TABLES.POSITIONS]),
+            transformers,
+            createCache()
+        ),
+        getTransaction
+    )
+
     const wildcardStore = createWildcardStore(
         buildKvStore(
             TABLES.WILDCARDS,
-            createKeyValueStore(wildcardsName),
+            createKeyValueStore(names[TABLES.WILDCARDS]),
             transformers,
-            wildcardsCache
-        )
-    )
-
-    const dataCache = useCache ? createCache() : undefined
-    const dataStore = createDataStore(
-        buildKvStore(
-            TABLES.DATA ,
-            createKeyValueStore(dataName),
-            transformers,
-            dataCache
-        )
+            createCache()
+        ),
+        getTransaction
     )
 
     const metadataStore = createMetadataStore(
         buildKvStore(
             TABLES.METADATA,
-            createKeyValueStore(metadataName),
-            transformers
-        ),
-        getTransaction
-    )
-
-    const translationCache = useCache ? createCache() : undefined
-    const translationStore = createTranslationStore(
-        buildKvStore(
-            TABLES.TRANSLATIONS,
-            createKeyValueStore(translationName),
+            createKeyValueStore(names[TABLES.METADATA]),
             transformers,
-            translationCache
+            createCache()
         ),
         getTransaction
     )
-
-    /**
-     * Clean stale data from the keywords->id table when performing a search.
-     * It relies on the fact that a keyword returned an id which does not exist in the data table.
-     * @param {Array} datas
-     * @param {Array} ids
-     * @param {Array} uniqueKeywords
-     * @returns {Promise}
-     */
-    const cleanStaleData = async (datas, ids, uniqueKeywords) => {
-        const staleIds = datas.reduce((agg, { keywords } = {}, i) => {
-            // Detecting stale data.
-            if (!Array.isArray(keywords)) {
-                agg.push(ids[i])
-            }
-            return agg
-        }, [])
-
-        if (!staleIds) {
-            return
-        }
-
-        const tx = await getTransaction([keywordsName], READWRITE)
-        const promise = transaction(tx)
-
-        staleIds.map((id) => keywordsStore.remove(uniqueKeywords, id, tx))
-
-        return promise
-    }
-
-    /**
-     * Find data based on the keywords.
-     * @param {Array} searchKeywords Keywords to search
-     * @return {Promise}
-     */
-    const search = async (searchKeywords = []) => {
-        if (!Array.isArray(searchKeywords)) {
-            throw new Error('Keywords must be an array')
-        }
-
-        const tx = await getTransaction([dataName, keywordsName])
-
-        const uniqueKeywords = unique(searchKeywords)
-        const { keywordsToIds, idsToKeywords, ids } = await keywordsStore.get(uniqueKeywords, tx)
-        const data = await dataStore.getByIds(ids, tx)
-
-        cleanStaleData(data, ids, uniqueKeywords)
-
-        const idsTranslated = await translationStore.getTranslatedIds(ids)
-
-        const result = data
-            .reduce((agg, { data, keywords } = {}, i) => {
-                // Ignore stale data.
-                if (!Array.isArray(keywords)) {
-                    return agg
-                }
-
-                const id = idsTranslated[i]
-                const match = idsToKeywords[i]
-
-                agg.push({
-                    id,
-                    data,
-                    keywords,
-                    match
-                })
-
-                return agg
-            }, [])
-
-        return {
-            result,
-            ids,
-            keywordsToIds
-        }
-    }
-
-    /**
-     * Store keywords and data to index.
-     * @param {String|Number} id
-     * @param  {Array} keywords
-     * @param  {*} [data]
-     * @return {Promise}
-     */
-    const store = async (id, keywords, data) => {
-        if (!assertId(id)) {
-            throw new Error('ID required')
-        }
-        if (!Array.isArray(keywords)) {
-            throw new Error('Keywords need to be an array')
-        }
-
-        const translatedId = await translationStore.getOrSetId(id)
-        const tx = await getTransaction([dataName, keywordsName, wildcardsName], READWRITE)
-        const promise = transaction(tx)
-
-        const uniqueKeywords = unique(keywords)
-
-        keywordsStore.insert(uniqueKeywords, translatedId, tx)
-        dataStore.insert(translatedId, data, keywords, tx)
-        wildcardStore.insert(uniqueKeywords, tx)
-
-        return promise
-    }
-
-    /**
-     * Update the data.
-     * @param {String|Number} id
-     * @param  {Function} cb
-     * @returns {Promise}
-     */
-    const update = async (id, cb) => {
-        if (!assertId(id)) {
-            throw new Error('ID required')
-        }
-
-        const translatedId = await translationStore.getOrSetId(id)
-        const tx = await getTransaction([dataName], READWRITE)
-        const promise = transaction(tx)
-
-        dataStore.update(translatedId, cb, tx)
-
-        return promise
-    }
-
-    /**
-     * Remove a data item. Ensures that all keywords related to the data are deleted too.
-     * Returns a promise that resolves to a list of keywords that were fully deleted.
-     * @param {String|Number} id
-     * @returns {Promise}
-     */
-    const remove = async (id = '') => {
-        if (!assertId(id)) {
-            throw new Error('ID required')
-        }
-
-        const translatedId = await translationStore.getOrSetId(id)
-        const tx = await getTransaction([dataName, keywordsName, wildcardsName], READWRITE)
-        const promise = transaction(tx)
-
-        const keywords = await dataStore.getKeywords(translatedId, tx)
-        const uniqueKeywords = unique(keywords)
-        const removals = await keywordsStore.remove(uniqueKeywords, translatedId, tx)
-        const removedKeywords = uniqueKeywords.filter((keyword, i) => removals[i])
-
-        dataStore.remove(translatedId, tx)
-        wildcardStore.remove(removedKeywords, tx)
-
-        return promise
-    }
-
-    /**
-     * Perform a wildcard query.
-     * @param {String} query Wildcard query pattern.
-     * @returns {Promise}
-     */
-    const wildcard = async (query) => {
-        const tx = await getTransaction([wildcardsName])
-        return wildcardStore.search(query, tx)
-    }
-
-    const clearCache = () => {
-        if (!useCache) {
-            return
-        }
-        dataCache.clear()
-        keywordsCache.clear()
-        wildcardsCache.clear()
-        translationCache.clear()
-    }
-
-    /**
-     * Clear all tables.
-     * @return {Promise}
-     */
-    const clear = async () => {
-        const tx = await getTransaction([dataName, keywordsName, wildcardsName, metadataName, translationName], READWRITE)
-        const promise = transaction(tx)
-
-        clearCache()
-
-        dataStore.clear(tx)
-        keywordsStore.clear(tx)
-        wildcardStore.clear(tx)
-        metadataStore.clear(tx)
-        translationStore.clear(tx)
-
-        return promise
-    }
 
     /**
      * Initialize the database by writing an integrity value. This value
@@ -342,40 +173,222 @@ export default ({
     const corrupt = async () => (await metadataStore.get(INTEGRITY_KEY)) !== INTEGRITY_VALUE
 
     /**
+     * Clean stale data from the postings table when performing a search.
+     * It relies on the fact that a term returned an id which does not exist in the positions table.
+     * @param {Array} positions
+     * @param {Array} ids
+     * @param {Array} terms
+     */
+    const cleanStaleData = async (positions, ids, terms) => {
+        const staleIds = positions.reduce((agg, terms, i) => {
+            // Detecting stale data.
+            if (terms.length === 0) {
+                agg.push(ids[i])
+            }
+            return agg
+        }, [])
+
+        if (!staleIds.length) {
+            return
+        }
+
+        staleIds.forEach((id) => postingsStore.removeBulk(terms, id))
+    }
+
+    /**
+     * Find data based on the terms.
+     * @param {Array} searchTerms Terms to search
+     * @return {Promise}
+     */
+    const search = async (searchTerms = []) => {
+        if (!Array.isArray(searchTerms)) {
+            throw new Error('Terms must be an array')
+        }
+
+        const uniqueSearchTerms = unique(searchTerms)
+        const uniqueTransposedTerms = await lexiconStore.bulk(uniqueSearchTerms)
+        const { idsToTerms, termsToIds, ids } = await postingsStore.getBulk(uniqueTransposedTerms)
+        const positions = await positionsStore.getBulk(ids)
+        const termIds = unique(flatten(positions))
+
+        cleanStaleData(positions, ids, uniqueTransposedTerms)
+
+        const [idsTransposed, termsTransposed] = await Promise.all([
+            idsStore.from(ids),
+            lexiconStore.from(termIds)
+        ])
+
+        const termIdsToTerm = termIds.reduce((agg, cur, i) => {
+            agg[cur] = termsTransposed[i]
+            return agg
+        }, {})
+
+        const result = positions
+            .reduce((agg, terms, i) => {
+                // Ignore stale data.
+                if (terms.length === 0) {
+                    return agg
+                }
+
+                const id = idsTransposed[i]
+                const match = idsToTerms[i]
+                const transposedTerms = terms.map((term) => termIdsToTerm[term])
+                const transposedMatch = match.map((term) => termIdsToTerm[term])
+
+                agg.push({
+                    _id: ids[i],
+                    _terms: terms,
+                    _match: match,
+                    terms: transposedTerms,
+                    match: transposedMatch,
+                    id,
+                })
+
+                return agg
+            }, [])
+
+        return {
+            result,
+            ids,
+            termsToIds,
+            idsToTerms
+        }
+    }
+
+    /**
+     * Store terms.
+     * @param {String|Number} id
+     * @param  {Array} terms
+     * @return {Promise}
+     */
+    const store = async (id, terms) => {
+        if (!assertId(id)) {
+            throw new Error('ID required')
+        }
+        if (!Array.isArray(terms) || terms.length === 0) {
+            throw new Error('Terms must be an array')
+        }
+
+        const [[transposedId], transposedTerms] = await Promise.all([
+            idsStore.bulk([id]),
+            lexiconStore.bulk(terms)
+        ])
+
+        const uniqueTerms = unique(terms)
+        const uniqueTransposedTerms = unique(transposedTerms)
+
+        return Promise.all([
+            postingsStore.insertBulk(uniqueTransposedTerms, transposedId),
+            positionsStore.insert(transposedId, transposedTerms),
+            wildcardStore.insertBulk(uniqueTerms, uniqueTransposedTerms)
+        ])
+    }
+
+    /**
+     * Remove a document. Also deletes all terms related to the document as well.
+     * Returns a promise that resolves to a list of terms that were fully deleted.
+     * @param {String|Number} id
+     * @returns {Promise}
+     */
+    const remove = async (id) => {
+        if (!assertId(id)) {
+            throw new Error('ID required')
+        }
+
+        const [transposedId] = await idsStore.bulk([id])
+
+        const terms = await positionsStore.get(transposedId)
+
+        const uniqueTerms = unique(terms)
+        const removals = await postingsStore.removeBulk(uniqueTerms, transposedId)
+        const removedTerms = uniqueTerms.filter((term, i) => removals[i])
+
+        return Promise.all([
+            lexiconStore.from(removedTerms)
+                .then((termsTransposed) => wildcardStore.removeBulk(termsTransposed, removedTerms)),
+            positionsStore.remove(transposedId)
+        ])
+    }
+
+    /**
+     * Perform a wildcard query.
+     * @param {String} query Wildcard query pattern.
+     * @returns {Promise}
+     */
+    const wildcard = async (query) => {
+        const terms = await wildcardStore.get(query)
+        const termsTransposed = await lexiconStore.from(terms)
+        return termsTransposed
+            .filter((token) => wildcardMatch(token, query))
+    }
+
+    /**
+     * Clear all tables.
+     * @return {Promise}
+     */
+    const clear = async () => {
+        const stores = [postingsStore, positionsStore, wildcardStore, lexiconStore, idsStore]
+
+        clearCache()
+
+        const tx = await getTransaction([
+            ...flatten(stores.map((store) => store.name)),
+        ], READWRITE)
+
+        const promise = transaction(tx)
+        stores.forEach((store) => store.clear(tx))
+        return promise
+    }
+
+    /**
+     * Clear cache in every store.
+     */
+    const clearCache = () => {
+        [lexiconStore, idsStore, postingsStore, positionsStore, wildcardStore, metadataStore].forEach((store) => store.clearCache())
+    }
+
+    /**
      * Returns stats on all tables.
      * @returns {Promise}
      */
     const stats = async () => {
-        const tx = await getTransaction([dataName, keywordsName, wildcardsName])
 
-        const result = await Promise.all([keywordsStore, dataStore, wildcardStore]
-            .map((store) => Promise.all([store.count(tx), store.size(tx)])))
+        const get = async (store) => {
+            const tx = await getTransaction(store.name)
+            return Promise.all([store.count(tx), store.size(tx)])
+        }
+
+        const result = await Promise.all([postingsStore, positionsStore, wildcardStore, lexiconStore, idsStore].map(get))
 
         const getStats = (total, size) => ({ total, size })
         const getStatsResult = ([total, size]) => getStats(total, size)
 
-        const keywords = getStatsResult(result[0])
-        const data = getStatsResult(result[1])
+        const postings = getStatsResult(result[0])
+        const positions = getStatsResult(result[1])
         const wildcards = getStatsResult(result[2])
+        const lexicon = getStatsResult(result[3])
+        const ids = getStatsResult(result[4])
 
         return {
-            keywords,
-            data,
+            postings,
+            positions,
             wildcards,
+            lexicon,
+            ids,
             ...getStats(
-                keywords.total + data.total + wildcards.total,
-                keywords.size + data.size + wildcards.size
+                result.reduce((prev, cur) => prev + cur[0], 0),
+                result.reduce((prev, cur) => prev + cur[1], 0)
             )
         }
     }
 
     /**
-     * Return the number of keywords currently indexed.
+     * Return the number of terms currently indexed.
      * @returns {Promise}
      */
-    const numberOfKeywords = async () => {
-        const tx = await getTransaction([keywordsName])
-        return keywordsStore.count(tx)
+    const numberOfTerms = async () => {
+        const tx = await getTransaction(postingsStore.name)
+        return postingsStore.count(tx)
     }
 
     return {
@@ -383,14 +396,12 @@ export default ({
         search,
         wildcard,
         store,
-        update,
         remove,
         clear,
         clearCache,
         corrupt,
-        numberOfKeywords,
+        numberOfTerms,
         stats,
-        close,
-        metadata: metadataStore
+        close
     }
 }

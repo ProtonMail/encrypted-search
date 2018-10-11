@@ -1,5 +1,6 @@
 import {
     intersect,
+    minus,
     union,
     unique,
     ordered,
@@ -90,34 +91,30 @@ const curriedComparator = (comparator, b) => (a) => comparator(a, b)
 
 const trueCb = () => true
 
-const resultComparator = (a = {}, b = {}) => a.id && a.id === b.id
+const resultExtractor = (a = {}) => a._id
 
 const resultTransformer = (a, { match = [] } = {}) => ({ ...a, match: unique(a.match.concat(match)) })
 
 const beforeTransformer = (a, b) => {
-    const { keywords: keywordsLeft = [], match: matchLeft = [] } = a
-    const { match: matchRight = [] } = b
-    if (!ordered(keywordsLeft, matchLeft, matchRight)) {
+    const { _terms: _termsLeft = [], _match: _matchLeft = [] } = a
+    const { _match: _matchRight = [], match: matchRight = [] } = b
+    if (!ordered(_termsLeft, _matchLeft, _matchRight)) {
         return undefined
     }
     return {
         ...a,
+        _match: unique(a._match.concat(_matchRight)),
         match: unique(a.match.concat(matchRight))
     }
 }
 
-const handleResultsAndNot = (resultsA, resultsB) =>
-    resultsA
-        .filter((a) => resultsB.findIndex((b) => resultComparator(a, b)) === -1)
+const handleResultsAndNot = (resultsA, resultsB) => minus(resultsA, resultsB, resultExtractor)
 
-const handleResultsAnd = (resultsA, resultsB) =>
-    intersect(resultsA, resultsB, resultComparator, resultTransformer)
+const handleResultsAnd = (resultsA, resultsB) => intersect(resultsA, resultsB, resultExtractor, resultTransformer)
 
-const handleResultsOr = (resultsA, resultsB) =>
-    union(resultsA, resultsB, resultComparator, resultTransformer)
+const handleResultsOr = (resultsA, resultsB) => union(resultsA, resultsB, resultExtractor, resultTransformer)
 
-const handleResultsBefore = (resultsA, resultsB) =>
-    intersect(resultsA, resultsB, resultComparator, beforeTransformer)
+const handleResultsBefore = (resultsA, resultsB) => intersect(resultsA, resultsB, resultExtractor, beforeTransformer)
 
 const handleBranchResults = (queryOperator, resultsA, resultsB, notA, notB) => {
     switch (queryOperator) {
@@ -179,15 +176,15 @@ const handlePhrase = async (search, wildcard, keywords, phraseModifier, phraseOp
                 return results
             }
             return results
-                .filter(({ keywords: resultKeywords = [] }) => filter(resultKeywords) && quorom(resultKeywords, keywords, n, comparator))
+                .filter(({ terms: resultTerms = [] }) => filter(resultTerms) && quorom(resultTerms, keywords, n, comparator))
         }
         case PHRASE_PROXIMITY: {
             return results
-                .filter(({ keywords: resultKeywords = [] }) => filter(resultKeywords) && proximity(resultKeywords, keywords, n, comparator))
+                .filter(({ terms: resultTerms = [] }) => filter(resultTerms) && proximity(resultTerms, keywords, n, comparator))
         }
         case PHRASE_ALL: {
             return results
-                .filter(({ keywords: resultKeywords = [] }) => filter(resultKeywords) && contains(resultKeywords, keywords, comparator) !== -1)
+                .filter(({ terms: resultTerms = [] }) => filter(resultTerms) && contains(resultTerms, keywords, comparator) !== -1)
         }
     }
 }
@@ -202,13 +199,15 @@ const handleKeyword = async (search, wildcard, keyword, keywordStartOperator, ke
 
     if (keywordStartOperator === '^' || keywordEndOperator === '$') {
         return results
-            .filter(({ keywords: resultKeywords = [], match = [] }) => {
+            .filter(({ _terms: _terms = [], _match = [] }) => {
                 const start = keywordStartOperator === '^' ?
-                    curriedComparator(equalityComparator, resultKeywords[0]) : trueCb
+                    curriedComparator(equalityComparator, _terms[0]) : trueCb
+
                 const end = keywordEndOperator === '$' ?
-                    curriedComparator(equalityComparator, resultKeywords[resultKeywords.length - 1]) : trueCb
-                return resultKeywords.length > 0 && match.length > 0 &&
-                    match.some((matchedKeyword) =>
+                    curriedComparator(equalityComparator, _terms[_terms.length - 1]) : trueCb
+
+                return _terms.length > 0 && _match.length > 0 &&
+                    _match.some((matchedKeyword) =>
                         start(matchedKeyword) && end(matchedKeyword))
             })
     }

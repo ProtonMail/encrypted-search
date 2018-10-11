@@ -2,19 +2,20 @@ import { READWRITE, transaction } from '../helper/idb'
 
 /**
  * Metadata database helper.
- * @param {key-value store} store
+ * @param {Object} store
  * @param {Function} getTransaction
- * @param {String} name
  * @returns {Object}
  */
 export default (store, getTransaction) => {
+    const table = [store.name]
+
     /**
      * Get a key from the table.
      * @param {String} key
      * @returns {Promise}
      */
     const get = async (key) => {
-        return store.get(key, await getTransaction([store.name]))
+        return store.get(await getTransaction(table), key)
     }
 
     /**
@@ -24,10 +25,23 @@ export default (store, getTransaction) => {
      * @returns {Promise}
      */
     const set = async (key, value) => {
-        const tx = await getTransaction([store.name], READWRITE)
+        const tx = await getTransaction(table, READWRITE)
         const promise = transaction(tx)
-        store.set(key, value, tx)
+        store.put(tx, value, key)
         return promise
+    }
+
+    /**
+     * Get and set the next incrementing ID number.
+     * @param {String} key
+     * @returns {Promise}
+     */
+    const getAndSetId = async (key) => {
+        const tx = await getTransaction(table, READWRITE)
+        const value = await store.get(key, tx)
+        const newValue = (value === undefined ? -1 : value) + 1
+        store.put(tx, newValue, key)
+        return newValue
     }
 
     /**
@@ -36,16 +50,19 @@ export default (store, getTransaction) => {
      * @returns {Promise}
      */
     const remove = async (key) => {
-        const tx = await getTransaction([store.name], READWRITE)
+        const tx = await getTransaction(table, READWRITE)
         const promise = transaction(tx)
-        store.remove(key, tx)
+        store.remove(tx, key)
         return promise
     }
 
     return {
         get,
         set,
+        getAndSetId,
         remove,
-        clear: store.clear
+        name: store.name,
+        clear: store.clear,
+        clearCache: store.clearCache
     }
 }

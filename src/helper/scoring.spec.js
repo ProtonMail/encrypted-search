@@ -3,10 +3,10 @@ import scoring from './scoring'
 describe('scoring', () => {
     it('should give score 0 to queries that match nothing', () => {
         const scores = scoring({
-            keywords: ['abc'],
-            keywordsToIds: [[123]],
+            terms: ['abc'],
+            termsToIds: [[123]],
             N: 1000,
-            idsToKeywords: {
+            idsToTerms: {
                 123: ['foo']
             }
         })
@@ -16,10 +16,10 @@ describe('scoring', () => {
 
     it('should give score to queries that match exactly', () => {
         const scores = scoring({
-            keywords: ['foo'],
-            keywordsToIds: [[123]],
+            terms: ['foo'],
+            termsToIds: [[123]],
             N: 10,
-            idsToKeywords: {
+            idsToTerms: {
                 123: ['foo']
             }
         })
@@ -29,10 +29,10 @@ describe('scoring', () => {
 
     it('should give the same score to documents that match exactly', () => {
         const scores = scoring({
-            keywords: ['foo', 'bar'],
-            keywordsToIds: [[123, 124], [123, 125]],
+            terms: ['foo', 'bar'],
+            termsToIds: [[123, 124], [123, 125]],
             N: 1000,
-            idsToKeywords: {
+            idsToTerms: {
                 123: ['foo', 'bar'],
                 125: ['bar'],
                 124: ['foo']
@@ -42,12 +42,12 @@ describe('scoring', () => {
             .toBeTruthy()
     })
 
-    it('should give higher score to documents that contain both keywords', () => {
+    it('should give higher score to documents that contain both terms', () => {
         const scores = scoring({
-            keywords: ['foo', 'bar'],
-            keywordsToIds: [[123, 124], [123, 125]],
+            terms: ['foo', 'bar'],
+            termsToIds: [[123, 124], [123, 125]],
             N: 1000,
-            idsToKeywords: {
+            idsToTerms: {
                 123: ['foo', 'bar'],
                 125: ['bar', 'the'],
                 124: ['foo', 'the']
@@ -59,10 +59,10 @@ describe('scoring', () => {
 
     it('should give higher score to documents where the term is rare', () => {
         const scores = scoring({
-            keywords: ['foo'],
-            keywordsToIds: [[123, 124, 125]],
+            terms: ['foo'],
+            termsToIds: [[123, 124, 125]],
             N: 1000,
-            idsToKeywords: {
+            idsToTerms: {
                 123: ['foo'],
                 124: ['foo', 'the'],
                 125: ['foo', 'the', 'an']
@@ -74,10 +74,10 @@ describe('scoring', () => {
 
     it('should give higher score to documents where the term is rare', () => {
         const scores = scoring({
-            keywords: ['foo', 'bar'],
-            keywordsToIds: [[123, 124, 125], [123]],
+            terms: ['foo', 'bar'],
+            termsToIds: [[123, 124, 125], [123]],
             N: 1000,
-            idsToKeywords: {
+            idsToTerms: {
                 123: ['foo', 'bar'],
                 124: ['foo', 'the'],
                 125: ['foo', 'the', 'an']

@@ -1,4 +1,4 @@
-export default ({ max = 1000 } = {}) => {
+export default ({ max = 10000 } = {}) => {
     const map = new Map()
     let head
     let tail
@@ -48,11 +48,11 @@ export default ({ max = 1000 } = {}) => {
     }
 
     const get = (key) => {
-        const el = map.get(key)
-        if (!el) {
+        const element = map.get(key)
+        if (!element) {
             return
         }
-        return el.value
+        return element.value
     }
 
     const set = (key, value) => {
@@ -70,6 +70,8 @@ export default ({ max = 1000 } = {}) => {
         } else {
             element = {
                 value,
+                next: undefined,
+                prev: head
             }
             map.set(key, element)
 
