@@ -141,7 +141,6 @@ export default (store, getTransaction) => {
         name: store.name,
         count: store.count,
         size: store.size,
-        clear: store.clear,
-        clearCache: store.clearCache
+        clear: store.clear
     }
 }

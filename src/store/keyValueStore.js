@@ -2,36 +2,6 @@ import { request } from '../helper/idb'
 import sizeof from '../helper/sizeof'
 
 /**
- * Enhance a key-value store with caching.
- * @param {Object} store
- * @param {Cache} cache
- * @returns {Object}
- */
-export const withCache = (store, { set, get, remove, clear }) => {
-    return {
-        ...store,
-        put: (tx, value, key) => {
-            set(key, value)
-            return store.put(tx, value, key)
-        },
-        get: async (tx, key) => {
-            const cachedValue = get(key)
-            if (cachedValue) {
-                return cachedValue
-            }
-            const value = await store.get(tx, key)
-            set(key, value)
-            return value
-        },
-        remove: (tx, key) => {
-            remove(key)
-            return store.remove(tx, key)
-        },
-        clearCache: clear
-    }
-}
-
-/**
  * Enhance a key-value store with transformer functions.
  * @param {Number} id
  * @param {Object} store
@@ -84,16 +54,16 @@ export default (tableName = '') => {
             })
         },
         put: (tx, value, key) => {
-            return tx.objectStore(tableName).put(value, key)
+            tx.objectStore(tableName).put(value, key)
         },
         get: (tx, key) => {
             return request(tx.objectStore(tableName).get(key))
         },
         remove: (tx, key) => {
-            return tx.objectStore(tableName).delete(key)
+            tx.objectStore(tableName).delete(key)
         },
         clear: (tx) => {
-            return tx.objectStore(tableName).clear()
+            tx.objectStore(tableName).clear()
         }
     }
 }

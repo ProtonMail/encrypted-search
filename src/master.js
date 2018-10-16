@@ -5,8 +5,7 @@ import createPositionsStore from './store/positionsStore'
 import createWildcardStore from './store/wildcardStore'
 import createMetadataStore from './store/metadataStore'
 import createTransposeStore from './store/transposeStore'
-import createKeyValueStore, { withCache, withTransformers } from './store/keyValueStore'
-import createCache from './helper/lru'
+import createKeyValueStore, { withTransformers } from './store/keyValueStore'
 
 import { flatten, unique } from './helper/array'
 import { wildcardMatch } from './helper/wildcard'
@@ -69,10 +68,6 @@ const DEFAULT_TRANSFORMERS = {
     deserialize: (id, key, value) => value
 }
 
-const buildKvStore = (id, store, transformer, cache) => {
-    return withCache(withTransformers(id, store, transformer), cache)
-}
-
 /**
  * Create the encrypted search index.
  * @param {Object} options
@@ -88,73 +83,65 @@ export default (options = {}) => {
     const { getTransaction, close } = openWithClosure(open, closeTimeout)
 
     const lexiconStore = createTransposeStore(
-        withCache(
-            withTransformers(
-                TABLES.LEXICON,
-                createKeyValueStore(names[TABLES.LEXICON]), transformers),
-            createCache()
+        withTransformers(
+            TABLES.LEXICON,
+            createKeyValueStore(names[TABLES.LEXICON]),
+            transformers
         ),
-        withCache(
-            withTransformers(
-                TABLES.LEXICON_INVERSE,
-                createKeyValueStore(names[TABLES.LEXICON_INVERSE]), transformers),
-            createCache()
+        withTransformers(
+            TABLES.LEXICON_INVERSE,
+            createKeyValueStore(names[TABLES.LEXICON_INVERSE]),
+            transformers
         ),
         getTransaction
     )
 
     const idsStore = createTransposeStore(
-        withCache(
-            withTransformers(
-                TABLES.IDS,
-                createKeyValueStore(names[TABLES.IDS]), transformers),
-            createCache()
+        withTransformers(
+            TABLES.IDS,
+            createKeyValueStore(names[TABLES.IDS]),
+            transformers
         ),
-        withCache(
-            withTransformers(
-                TABLES.IDS_INVERSE,
-                createKeyValueStore(names[TABLES.IDS_INVERSE]), transformers),
-            createCache()
+        withTransformers(
+            TABLES.IDS_INVERSE,
+            createKeyValueStore(names[TABLES.IDS_INVERSE]),
+            transformers
         ),
         getTransaction
     )
 
     const postingsStore = createPostingsStore(
-        buildKvStore(
+        withTransformers(
             TABLES.POSTINGS,
             createKeyValueStore(names[TABLES.POSTINGS]),
             transformers,
-            createCache()
         ),
         getTransaction
     )
 
     const positionsStore = createPositionsStore(
-        buildKvStore(
+        withTransformers(
             TABLES.POSITIONS,
             createKeyValueStore(names[TABLES.POSITIONS]),
             transformers,
-            createCache()
         ),
         getTransaction
     )
 
     const wildcardStore = createWildcardStore(
-        buildKvStore(
+        withTransformers(
             TABLES.WILDCARDS,
             createKeyValueStore(names[TABLES.WILDCARDS]),
-            transformers,
-            createCache()
+            transformers
         ),
         getTransaction
     )
 
     const metadataStore = createMetadataStore(
-        buildKvStore(
+        withTransformers(
             TABLES.METADATA,
             createKeyValueStore(names[TABLES.METADATA]),
             transformers,
-            createCache()
         ),
         getTransaction
     )
@@ -265,8 +252,11 @@ export default (options = {}) => {
         if (!assertId(id)) {
             throw new Error('ID required')
         }
-        if (!Array.isArray(terms) || terms.length === 0) {
+        if (!Array.isArray(terms)) {
             throw new Error('Terms must be an array')
+        }
+        if (terms.length === 0) {
+            return
         }
 
         const [[transposedId], transposedTerms] = await Promise.all([
@@ -329,8 +319,6 @@ export default (options = {}) => {
     const clear = async () => {
         const stores = [postingsStore, positionsStore, wildcardStore, lexiconStore, idsStore]
 
-        clearCache()
-
         const tx = await getTransaction([
             ...flatten(stores.map((store) => store.name)),
         ], READWRITE)
@@ -338,13 +326,6 @@ export default (options = {}) => {
         const promise = transaction(tx)
         stores.forEach((store) => store.clear(tx))
         return promise
-    }
-
-    /**
-     * Clear cache in every store.
-     */
-    const clearCache = () => {
-        [lexiconStore, idsStore, postingsStore, positionsStore, wildcardStore, metadataStore].forEach((store) => store.clearCache())
     }
 
     /**
@@ -398,7 +379,6 @@ export default (options = {}) => {
         store,
         remove,
         clear,
-        clearCache,
         corrupt,
         numberOfTerms,
         stats,

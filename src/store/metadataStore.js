@@ -62,7 +62,6 @@ export default (store, getTransaction) => {
         getAndSetId,
         remove,
         name: store.name,
-        clear: store.clear,
-        clearCache: store.clearCache
+        clear: store.clear
     }
 }

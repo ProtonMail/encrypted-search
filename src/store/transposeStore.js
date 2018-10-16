@@ -63,9 +63,5 @@ export default (aStore, bStore, getTransaction) => {
             aStore.clear(tx)
             bStore.clear(tx)
         },
-        clearCache: () => {
-            aStore.clearCache()
-            bStore.clearCache()
-        }
     }
 }

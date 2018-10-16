@@ -108,7 +108,6 @@ describe('index', () => {
         it('should fail when data gets corrupted', async () => {
             await index.initialize()
             await removeValue(TABLES.METADATA, 'T_E_S_T')
-            index.clearCache()
             const value = await index.corrupt()
             expect(value)
                 .toBeTruthy()
@@ -251,7 +250,6 @@ describe('index', () => {
             expect(await getValue(TABLES.POSTINGS, zebraId)).toEqual([internalId])
 
             await removeValue(TABLES.POSITIONS, internalId)
-            index.clearCache()
 
             expect(mapIds(await index.search(['unicorn', 'zebra']))).toEqual([])
             expect(await getValue(TABLES.POSTINGS, unicornId)).toBeUndefined()
