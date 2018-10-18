@@ -164,12 +164,14 @@ describe('index', () => {
 
         beforeAll(async () => {
             index = getIndex()
-            await index.store('123', tokenize(bodyA))
-            await index.store('124', tokenize(bodyB))
-            await index.store('125', tokenize(bodyC))
-            await index.store('150', tokenize('random text'))
-            await index.store('160', tokenize('redemption rededicate'))
-            await index.store('161', tokenize('redundancy retired rediscover'))
+            await Promise.all([
+                index.store('123', tokenize(bodyA)),
+                index.store('124', tokenize(bodyB)),
+                index.store('125', tokenize(bodyC)),
+                index.store('150', tokenize('random text')),
+                index.store('160', tokenize('redemption rededicate')),
+                index.store('161', tokenize('redundancy retired rediscover'))
+            ])
         })
 
         afterAll(async () => {
@@ -344,6 +346,7 @@ describe('index', () => {
                 getValue(TABLES.WILDCARDS, 'his').then(getTerms),
                 getValue(TABLES.WILDCARDS, 'is$').then(getTerms)
             ])
+            console.log(values)
             expect(values)
                 .toEqual([['this'], ['this'], ['this'], ['this', 'is']])
         })

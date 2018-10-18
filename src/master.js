@@ -242,6 +242,16 @@ export default (options = {}) => {
         }
     }
 
+    const measure = (name, promise) => {
+        const start = Date.now()
+        return promise
+            .then((result) => {
+                const diff = Date.now() - start
+                console.log(name, diff / 1000, 'seconds')
+                return result
+            })
+    }
+
     /**
      * Store terms.
      * @param {String|Number} id
@@ -268,9 +278,9 @@ export default (options = {}) => {
         const uniqueTransposedTerms = unique(transposedTerms)
 
         return Promise.all([
-            postingsStore.insertBulk(uniqueTransposedTerms, transposedId),
-            positionsStore.insert(transposedId, transposedTerms),
-            wildcardStore.insertBulk(uniqueTerms, uniqueTransposedTerms)
+            measure('posting insert bulk', postingsStore.insertBulk(uniqueTransposedTerms, transposedId)),
+            measure('position insert',positionsStore.insert(transposedId, transposedTerms)),
+            measure('wildcard insert bulk',wildcardStore.insertBulk(uniqueTerms, uniqueTransposedTerms))
         ])
     }
 

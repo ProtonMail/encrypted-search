@@ -1,6 +1,6 @@
 import { extractQueryTokenPadding, splitTokenPadding } from '../helper/wildcard'
 import { getArrayGaps, getGapsArray, unique } from '../helper/array'
-import { READWRITE, transaction } from '../helper/idb'
+import { READWRITE, request, transaction } from '../helper/idb'
 import { vbDecode, vbEncode } from '../helper/variableByteCodes'
 
 /**
@@ -37,9 +37,9 @@ export default (store, getTransaction) => {
      * @param {IDBTransaction} tx
      * @returns {Promise<Array>}
      */
-    const getList = (token, tx) => {
-        return store.get(tx, token)
-            .then((result) => getArrayGaps(vbDecode(result)))
+    const getList = async (token, tx) => {
+        const result = await store.get(tx, token)
+        return getArrayGaps(vbDecode(result))
     }
 
     /**
@@ -48,7 +48,7 @@ export default (store, getTransaction) => {
      * @param {IDBTransaction} tx
      */
     const setList = (token, list, tx) => {
-        store.put(tx, vbEncode(getGapsArray(list)), token)
+        return store.put(tx, vbEncode(getGapsArray(list)), token)
     }
 
     /**
@@ -76,6 +76,33 @@ export default (store, getTransaction) => {
         Object.keys(map)
             .forEach((token) => insertLink(token, map[token], tx))
         return promise
+    }
+
+    const insertLink2 = (token = '', oldValues, terms = [], tx) => {
+        const newValues = unique(oldValues.concat(terms))
+        return setList(token, newValues, tx)
+    }
+
+    const insertBulk2 = async (stringTerms, terms) => {
+        const map = splitToMap(stringTerms, terms)
+        const keys = Object.keys(map)
+        if (!keys.length) {
+            return
+        }
+        const tx = await getTransaction(table, READWRITE)
+        const links = await Promise.all(keys.map((key) => getList(key, tx)))
+
+        let req
+
+        for (let i = 0; i < links.length; ++i) {
+            req = insertLink2(keys[i], links[i], map[keys[i]], tx)
+        }
+
+        if (!req) {
+            return
+        }
+
+        return request(req)
     }
 
     /**
@@ -123,7 +150,7 @@ export default (store, getTransaction) => {
     }
 
     return {
-        insertBulk,
+        insertBulk: insertBulk2,
         get,
         removeBulk,
         name: store.name,

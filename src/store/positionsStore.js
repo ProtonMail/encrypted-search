@@ -1,4 +1,4 @@
-import { READWRITE, transaction } from '../helper/idb'
+import { READWRITE, request, transaction } from '../helper/idb'
 import { vbDecode, vbEncode } from '../helper/variableByteCodes'
 
 /**
@@ -17,9 +17,9 @@ export default (store, getTransaction) => {
      * @param {IDBTransaction} tx
      * @returns {Promise<Array<Number>>}
      */
-    const getList = (id, tx) => {
-        return store.get(tx, id)
-            .then((result) => vbDecode(result))
+    const getList = async (id, tx) => {
+        const result = await store.get(tx, id)
+        return vbDecode(result)
     }
 
     /**
@@ -50,9 +50,7 @@ export default (store, getTransaction) => {
      */
     const insert = async (id, terms) => {
         const tx = await getTransaction(table, READWRITE)
-        const promise = transaction(tx)
-        store.put(tx, vbEncode(terms), id)
-        return promise
+        return request(store.put(tx, vbEncode(terms), id))
     }
 
     /**

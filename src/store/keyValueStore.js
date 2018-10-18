@@ -54,16 +54,16 @@ export default (tableName = '') => {
             })
         },
         put: (tx, value, key) => {
-            tx.objectStore(tableName).put(value, key)
+            return tx.objectStore(tableName).put(value, key)
         },
         get: (tx, key) => {
             return request(tx.objectStore(tableName).get(key))
         },
         remove: (tx, key) => {
-            tx.objectStore(tableName).delete(key)
+            return tx.objectStore(tableName).delete(key)
         },
         clear: (tx) => {
-            tx.objectStore(tableName).clear()
+            return tx.objectStore(tableName).clear()
         }
     }
 }

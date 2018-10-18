@@ -1,6 +1,6 @@
 import { insertIntoGapsArray, removeFromGapsArray } from '../helper/array'
 import { vbDecode, vbEncode } from '../helper/variableByteCodes'
-import { READWRITE, transaction } from '../helper/idb'
+import { READWRITE, request, transaction } from '../helper/idb'
 
 /**
  * Postings database helper.
@@ -16,9 +16,9 @@ export default (store, getTransaction) => {
      * @param {IDBTransaction} tx
      * @returns {Promise<Array>}
      */
-    const getList = (term, tx) => {
-        return store.get(tx, term)
-            .then((result) => vbDecode(result))
+    const getList = async (term, tx) => {
+        const result = await store.get(tx, term)
+        return vbDecode(result)
     }
 
     /**
@@ -28,7 +28,7 @@ export default (store, getTransaction) => {
      * @param {IDBTransaction} tx
      */
     const setList = (term, list, tx) => {
-        store.put(tx, vbEncode(list), term)
+        return store.put(tx, vbEncode(list), term)
     }
 
     /**
@@ -47,6 +47,27 @@ export default (store, getTransaction) => {
         }
 
         setList(term, newValues, tx)
+    }
+    const insert2 = (term, id, result, tx) => {
+        const newValues = insertIntoGapsArray(result, id)
+
+        // Only allow unique links
+        if (!newValues) {
+            return
+        }
+
+        return setList(term, newValues, tx)
+    }
+
+
+    /**
+     * Get the matching posting lists.
+     * @param {Number} term
+     * @returns {Promise}
+     */
+    const get = async (term) => {
+        const tx = await getTransaction(store.name)
+        return getList(term, tx)
     }
 
     /**
@@ -119,7 +140,7 @@ export default (store, getTransaction) => {
         const tx = await getTransaction(store.name, READWRITE)
         const promise = transaction(tx)
         const result = []
-        terms.forEach((term, i) =>
+        terms.forEach(async (term, i) =>
             removeLink(term, id, tx)
                 .then((value) => result[i] = value)
         )
@@ -134,8 +155,40 @@ export default (store, getTransaction) => {
         return promise
     }
 
+    /**
+     * Insert bulk, only waits for the last request rather than the transaction.
+     * It's supposedly fast, but data consistency guarantees?
+     * @param {Array} terms
+     * @param {Number} id
+     * @returns {Promise}
+     */
+    const insertBulk2 = async (terms, id) => {
+        if (terms.length === 0) {
+            return
+        }
+
+        const tx = await getTransaction(store.name, READWRITE)
+        const postingLists = await Promise.all(terms.map((term) => getList(term, tx)))
+
+        let req = undefined
+        for (let i = 0; i < terms.length; ++i) {
+            const insertRequest = insert2(terms[i], id, postingLists[i], tx)
+
+            if (insertRequest) {
+                req = insertRequest
+            }
+        }
+
+        if (!req) {
+            return
+        }
+
+        return request(req)
+    }
+
     return {
-        insertBulk,
+        get,
+        insertBulk: insertBulk2,
         getBulk,
         removeBulk,
         name: store.name,
