@@ -6,7 +6,7 @@ import createWildcardStore from './store/wildcardStore'
 import createTransposeStore from './store/transposeStore'
 import createKeyValueStore, { withTransformers } from './store/keyValueStore'
 
-import { flatten, shuffleTwo, unique } from './helper/array'
+import { flatten, mutablyShuffleTwo, unique } from './helper/array'
 import { wildcardMatch } from './helper/wildcard'
 
 const DB_VERSION = 1
@@ -214,16 +214,6 @@ export default (options = {}) => {
         }
     }
 
-    const measure = (name, promise) => {
-        const start = Date.now()
-        return promise
-            .then((result) => {
-                const diff = Date.now() - start
-                console.log(name, diff / 1000, 'seconds')
-                return result
-            })
-    }
-
     /**
      * Store terms.
      * @param {String|Number} id
@@ -250,12 +240,12 @@ export default (options = {}) => {
         const uniqueTransposedTerms = unique(transposedTerms)
 
         // Randomize the array to prevent row-lock contention
-        shuffleTwo(uniqueTerms, uniqueTransposedTerms)
+        mutablyShuffleTwo(uniqueTerms, uniqueTransposedTerms)
 
         return Promise.all([
-            measure('posting insert bulk', postingsStore.insertBulk(uniqueTransposedTerms, transposedId)),
-            measure('position insert', positionsStore.insert(transposedId, transposedTerms)),
-            measure('wildcard insert bulk', wildcardStore.insertBulk(uniqueTerms, uniqueTransposedTerms))
+            postingsStore.insertBulk(uniqueTransposedTerms, transposedId),
+            positionsStore.insert(transposedId, transposedTerms),
+            wildcardStore.insertBulk(uniqueTerms, uniqueTransposedTerms)
         ])
     }
 

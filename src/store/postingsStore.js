@@ -1,4 +1,4 @@
-import { insertIntoGapsArray, removeFromGapsArray, shuffle } from '../helper/array'
+import { insertIntoGapsArray, removeFromGapsArray } from '../helper/array'
 import { vbDecode, vbEncode } from '../helper/variableByteCodes'
 import { READWRITE, request, transaction } from '../helper/idb'
 

@@ -1,7 +1,7 @@
 import { READWRITE, request } from '../helper/idb'
 
 export default (aStore, bStore, getTransaction) => {
-    const idKey = 'id'
+    const idKey = '*_=% id %=_*'
     const table = [aStore.name, bStore.name]
 
     const from = async (bs = []) => {

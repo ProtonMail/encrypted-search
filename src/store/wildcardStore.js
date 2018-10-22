@@ -1,5 +1,5 @@
 import { extractQueryTokenPadding, splitTokenPadding } from '../helper/wildcard'
-import { getArrayGaps, getGapsArray, shuffle, unique } from '../helper/array'
+import { getArrayGaps, getGapsArray, unique } from '../helper/array'
 import { READWRITE, request, transaction } from '../helper/idb'
 import { vbDecode, vbEncode } from '../helper/variableByteCodes'
 

@@ -348,8 +348,9 @@ export const shuffle = (array) => {
     return result
 }
 
-export const shuffleTwo = (arrayA, arrayB) => {
-    for (let i = arrayA.length - 1; i > 0; i--) {
+export const mutablyShuffleTwo = (arrayA, arrayB) => {
+    const l = arrayA.length
+    for (let i = l - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
         swap(arrayA, i, j)
         swap(arrayB, i, j)
