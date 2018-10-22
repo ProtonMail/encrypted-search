@@ -3,16 +3,13 @@ import { open as openDb, transaction, READWRITE, openWithClosure } from './helpe
 import createPostingsStore from './store/postingsStore'
 import createPositionsStore from './store/positionsStore'
 import createWildcardStore from './store/wildcardStore'
-import createMetadataStore from './store/metadataStore'
 import createTransposeStore from './store/transposeStore'
 import createKeyValueStore, { withTransformers } from './store/keyValueStore'
 
-import { flatten, shuffle, shuffleTwo, unique } from './helper/array'
+import { flatten, shuffleTwo, unique } from './helper/array'
 import { wildcardMatch } from './helper/wildcard'
 
 const DB_VERSION = 1
-const INTEGRITY_KEY = 'T_E_S_T'
-const INTEGRITY_VALUE = 'TEST'
 
 export const TABLES = {
     LEXICON: 1,
@@ -23,8 +20,7 @@ export const TABLES = {
 
     POSTINGS: 5,
     POSITIONS: 6,
-    WILDCARDS: 7,
-    METADATA: 8
+    WILDCARDS: 7
 }
 
 export const DEFAULT_NAMES = {
@@ -35,8 +31,7 @@ export const DEFAULT_NAMES = {
     [TABLES.IDS_INVERSE]: 'ids_inverse',
     [TABLES.POSTINGS]: 'postings',
     [TABLES.POSITIONS]: 'positions',
-    [TABLES.WILDCARDS]: 'wildcards',
-    [TABLES.METADATA]: 'metadata'
+    [TABLES.WILDCARDS]: 'wildcards'
 }
 
 const upgradeDb = (names) => (db, oldVersion) => {
@@ -49,8 +44,7 @@ const upgradeDb = (names) => (db, oldVersion) => {
                 TABLES.IDS_INVERSE,
                 TABLES.POSTINGS,
                 TABLES.POSITIONS,
-                TABLES.WILDCARDS,
-                TABLES.METADATA
+                TABLES.WILDCARDS
             ].forEach((table) => db.createObjectStore(names[table]))
             break
         }
@@ -136,28 +130,6 @@ export default (options = {}) => {
         ),
         getTransaction
     )
-
-    const metadataStore = createMetadataStore(
-        withTransformers(
-            TABLES.METADATA,
-            createKeyValueStore(names[TABLES.METADATA]),
-            transformers,
-        ),
-        getTransaction
-    )
-
-    /**
-     * Initialize the database by writing an integrity value. This value
-     * is checked in the corrupt method to compare if it is still the same.
-     * @returns {Promise}
-     */
-    const initialize = () => metadataStore.set(INTEGRITY_KEY, INTEGRITY_VALUE)
-
-    /**
-     * Returns a boolean whether the integrity of the database still holds.
-     * @returns {Promise}
-     */
-    const corrupt = async () => (await metadataStore.get(INTEGRITY_KEY)) !== INTEGRITY_VALUE
 
     /**
      * Clean stale data from the postings table when performing a search.
@@ -282,8 +254,8 @@ export default (options = {}) => {
 
         return Promise.all([
             measure('posting insert bulk', postingsStore.insertBulk(uniqueTransposedTerms, transposedId)),
-            measure('position insert',positionsStore.insert(transposedId, transposedTerms)),
-            measure('wildcard insert bulk',wildcardStore.insertBulk(uniqueTerms, uniqueTransposedTerms))
+            measure('position insert', positionsStore.insert(transposedId, transposedTerms)),
+            measure('wildcard insert bulk', wildcardStore.insertBulk(uniqueTerms, uniqueTransposedTerms))
         ])
     }
 
@@ -386,13 +358,11 @@ export default (options = {}) => {
     }
 
     return {
-        initialize,
         search,
         wildcard,
         store,
         remove,
         clear,
-        corrupt,
         numberOfTerms,
         stats,
         close

@@ -29,9 +29,9 @@ const init = async () => {
     const transformers = createEncryptionHelper(key, salt)
     const index = create({ transformers })
 
-    await index.store('123', tokenize('this is a long string that can be searched'), { data: { etc: 1 } })
-    await index.store('124', tokenize('this is another document that is inserted into the index'), { data: { etc: 123121 } })
-    await index.store('125', tokenize('this is the last document'), { data: { etc: 4 } })
+    await index.store('123', tokenize('this is a long string that can be searched'))
+    await index.store('124', tokenize('this is another document that is inserted into the index'))
+    await index.store('125', tokenize('this is the last document'))
 
     const $input = document.body.querySelector('input')
     const $results = document.body.querySelector('.results')

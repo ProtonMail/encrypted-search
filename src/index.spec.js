@@ -80,40 +80,6 @@ describe('index', () => {
     const getInternalTermIds = getMultiple(TABLES.LEXICON_INVERSE)
     const getTerms = getMultiple(TABLES.LEXICON)
 
-    describe('metadata', () => {
-        let index
-
-        beforeAll(async () => {
-            index = createIndex({ transformers })
-        })
-
-        afterAll(async () => {
-            await index.clear()
-            index.close()
-        })
-
-        it('should initialize corruption data', async () => {
-            await index.initialize()
-            expect(await getValue(TABLES.METADATA, 'T_E_S_T'))
-                .toEqual('TEST')
-        })
-
-        it('should read corruption data', async () => {
-            await index.initialize()
-            const value = await index.corrupt()
-            expect(value)
-                .toBeFalsy()
-        })
-
-        it('should fail when data gets corrupted', async () => {
-            await index.initialize()
-            await removeValue(TABLES.METADATA, 'T_E_S_T')
-            const value = await index.corrupt()
-            expect(value)
-                .toBeTruthy()
-        })
-    })
-
     describe('store', () => {
         let index
         let internalDocId
