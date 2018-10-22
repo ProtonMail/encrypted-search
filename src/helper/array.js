@@ -326,3 +326,32 @@ export const removeFromGapsArray = (array = [], id) => {
 
     return array
 }
+
+/**
+ * Shuffle an array.
+ * @param {Array} result
+ * @param {Number} i
+ * @param {Number} j
+ */
+const swap = (result, i, j) => {
+    const temp = result[i]
+    result[i] = result[j]
+    result[j] = temp
+}
+
+export const shuffle = (array) => {
+    const result = array.slice()
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        swap(result, i, j)
+    }
+    return result
+}
+
+export const shuffleTwo = (arrayA, arrayB) => {
+    for (let i = arrayA.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        swap(arrayA, i, j)
+        swap(arrayB, i, j)
+    }
+}

@@ -1,5 +1,5 @@
 import { extractQueryTokenPadding, splitTokenPadding } from '../helper/wildcard'
-import { getArrayGaps, getGapsArray, unique } from '../helper/array'
+import { getArrayGaps, getGapsArray, shuffle, unique } from '../helper/array'
 import { READWRITE, request, transaction } from '../helper/idb'
 import { vbDecode, vbEncode } from '../helper/variableByteCodes'
 
@@ -149,10 +149,34 @@ export default (store, getTransaction) => {
         return promise
     }
 
+    const removeBulk2 = async (stringTerms = [], terms) => {
+        const map = splitToMap(stringTerms, terms)
+        const tx = await getTransaction(table, READWRITE)
+        const keys = Object.keys(map)
+        if (!keys.length) {
+            return
+        }
+        const lists = await Promise.all(keys.map((key) => getList(key, tx)))
+        let req
+        for (let i = 0; i < keys.length; ++i) {
+            const token = keys[i]
+            const oldValues = lists[i]
+            const tokenTerms = map[token]
+
+            const newValues = oldValues.filter((aTerm) => !tokenTerms.some((term) => term === aTerm))
+            if (newValues.length === 0) {
+                req = store.remove(tx, token)
+                continue
+            }
+            req = setList(token, newValues, tx)
+        }
+        return request(req)
+    }
+
     return {
         insertBulk: insertBulk2,
         get,
-        removeBulk,
+        removeBulk: removeBulk2,
         name: store.name,
         count: store.count,
         size: store.size,

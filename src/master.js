@@ -7,7 +7,7 @@ import createMetadataStore from './store/metadataStore'
 import createTransposeStore from './store/transposeStore'
 import createKeyValueStore, { withTransformers } from './store/keyValueStore'
 
-import { flatten, unique } from './helper/array'
+import { flatten, shuffle, shuffleTwo, unique } from './helper/array'
 import { wildcardMatch } from './helper/wildcard'
 
 const DB_VERSION = 1
@@ -276,6 +276,9 @@ export default (options = {}) => {
 
         const uniqueTerms = unique(terms)
         const uniqueTransposedTerms = unique(transposedTerms)
+
+        // Randomize the array to prevent row-lock contention
+        shuffleTwo(uniqueTerms, uniqueTransposedTerms)
 
         return Promise.all([
             measure('posting insert bulk', postingsStore.insertBulk(uniqueTransposedTerms, transposedId)),
