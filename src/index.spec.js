@@ -346,7 +346,6 @@ describe('index', () => {
                 getValue(TABLES.WILDCARDS, 'his').then(getTerms),
                 getValue(TABLES.WILDCARDS, 'is$').then(getTerms)
             ])
-            console.log(values)
             expect(values)
                 .toEqual([['this'], ['this'], ['this'], ['this', 'is']])
         })

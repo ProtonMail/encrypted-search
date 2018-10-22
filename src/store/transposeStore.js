@@ -1,4 +1,4 @@
-import { READWRITE, transaction } from '../helper/idb'
+import { READWRITE, request } from '../helper/idb'
 
 export default (aStore, bStore, getTransaction) => {
     const idKey = 'id'
@@ -15,17 +15,21 @@ export default (aStore, bStore, getTransaction) => {
         let id = initialId
         const result = await Promise.all(as.map((a) => bStore.get(tx, a)))
         const seen = new Map()
+        let requestA
+        let requestB
 
-        const cb = (iid, i) => {
+        for (let i = 0; i < result.length; ++i) {
+            const iid = result[i]
+
             if (iid) {
-                return
+                continue
             }
 
             // Duplicates...
             const a = as[i]
             if (seen.has(a)) {
                 result[i] = seen.get(a)
-                return
+                continue
             }
 
             const newId = id++
@@ -33,28 +37,28 @@ export default (aStore, bStore, getTransaction) => {
             seen.set(a, newId)
             result[i] = newId
 
-            aStore.put(tx, a, newId)
-            bStore.put(tx, newId, a)
+            requestA = aStore.put(tx, a, newId)
+            requestB = bStore.put(tx, newId, a)
         }
-
-        const promise = transaction(tx)
-
-        result.forEach(cb)
 
         if (id !== initialId) {
-            bStore.put(tx, id, idKey)
+            requestB = bStore.put(tx, id, idKey)
         }
 
-        await promise
+        if (requestA) {
+            await Promise.all([request(requestA), request(requestB)])
+        }
 
         return result
     }
 
-    const stat = (type = 'count') => (tx) => Promise.all([aStore[type](tx), bStore[type](tx)])
-        .then((result) => result.reduce((agg, cur) => agg + cur, 0))
+    const stat = (type = 'count') => async (tx) => {
+        const result = await Promise.all([aStore[type](tx), bStore[type](tx)])
+        return result.reduce((agg, cur) => agg + cur, 0)
+    }
 
     return {
-        name: [aStore.name, bStore.name],
+        name: table,
         bulk,
         from,
         count: stat('count'),
