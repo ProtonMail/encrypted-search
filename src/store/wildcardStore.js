@@ -69,6 +69,7 @@ export default (store, getTransaction) => {
      * @param {Array<Number>} terms
      * @returns {Promise}
      */
+    // eslint-disable-next-line no-unused-vars
     const insertBulk = async (stringTerms, terms) => {
         const tx = await getTransaction(table, READWRITE)
         const map = splitToMap(stringTerms, terms)
@@ -140,6 +141,7 @@ export default (store, getTransaction) => {
      * @param {Array<Number>} terms
      * @returns {Promise}
      */
+    // eslint-disable-next-line no-unused-vars
     const removeBulk = async (stringTerms = [], terms) => {
         const map = splitToMap(stringTerms, terms)
         const tx = await getTransaction(table, READWRITE)

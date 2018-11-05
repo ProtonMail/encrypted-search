@@ -136,6 +136,7 @@ export default (store, getTransaction) => {
      * @param {Number} id
      * @return {Promise<Array>}
      */
+    // eslint-disable-next-line no-unused-vars
     const removeBulk = async (terms, id) => {
         const tx = await getTransaction(store.name, READWRITE)
         const promise = transaction(tx)
@@ -182,6 +183,7 @@ export default (store, getTransaction) => {
         return result
     }
 
+    // eslint-disable-next-line no-unused-vars
     const insertBulk = async (terms, id) => {
         const tx = await getTransaction(store.name, READWRITE)
         const promise = transaction(tx)
