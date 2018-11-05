@@ -13,13 +13,15 @@ Chrome, Safari, Firefox, Edge, IE11
 import { create, query, parse, tokenize } from 'encrypted-search'
 
 // The encryption helpers. The hash is used for the key name. Encrypt and decrypt for the values.
-const hash = (input) => input
-const encrypt = (key, value) => value
-const decrypt = (key, value) => value
+const transformers = {
+    property: (tableId, input) => input
+    serialize: (tableId, key, value) => value
+    deserialize: (tableId, key, value) => value
+}
 
-const index = create({ hash, encrypt, decrypt })
+const index = create({ transformers })
 
-await index.store('123', tokenize('this is a long string that can be searched'), { data: { etc: 1 } })
+await index.store('123', tokenize('this is a long string that can be searched'))
 
 const searchString = '(this << is & "long string") | can'
 const results = await query(index.search, index.wildcard, parse(searchString))
@@ -27,11 +29,6 @@ const results = await query(index.search, index.wildcard, parse(searchString))
 [
   {
     "id": "123",
-    "data": {
-      "data": {
-        "etc": 1
-      }
-    },
     "keywords": [
       "this",
       "is",
@@ -71,17 +68,8 @@ It has support for multiple search operators.
 | COMBINATION | (these words &#124; any o*der) << after                 | fulfil the query in combination                              |
 
 ## Default Options
+TODO
 
-```javascript
-{
-    dbName: 'index', // 
-    dataName: 'data', // The name of the data object store.
-    keywordsName: 'keywords', // The name of the keywords object store.
-    wildcardsName: 'wildcards', // The name of the wildcards object store.
-    metadataName: 'metadata', // The name of the metadata object store.
-    closeTimeout: 15000 // Timeout before closing the indexedDB connection.
-}
-```
 
 ## Example
 
